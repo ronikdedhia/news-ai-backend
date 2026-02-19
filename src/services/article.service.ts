@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { articles, NewArticle } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 
 class ArticleService {
@@ -61,15 +61,22 @@ class ArticleService {
   }
 
   /**
-   * Get all articles with optional pagination
+   * Get all articles with pagination - returns title, content, url, imageUrl
+   * Sorted by latest publishedAt first
    */
   async getArticles(limit: number = 10, offset: number = 0) {
     return db
-      .select()
+      .select({
+        id: articles.id,
+        title: articles.title,
+        content: articles.content,
+        url: articles.url,
+        imageUrl: articles.imageUrl,
+      })
       .from(articles)
       .limit(limit)
       .offset(offset)
-      .orderBy(articles.publishedAt);
+      .orderBy(desc(articles.publishedAt));
   }
 
   /**
@@ -81,6 +88,60 @@ class ArticleService {
       .from(articles)
       .where(eq(articles.url, url))
       .limit(1);
+  }
+
+  /**
+   * Update bookmark count - increment or decrement
+   * action: 'increment' or 'decrement'
+   */
+  async updateBookmarkCount(articleId: string, action: 'increment' | 'decrement'): Promise<{ success: boolean; bookmarkCount: number }> {
+    try {
+      // Get current bookmark count
+      const article = await db
+        .select({ bookmarkCount: articles.bookmarkCount })
+        .from(articles)
+        .where(eq(articles.id, articleId))
+        .limit(1);
+
+      if (!article || article.length === 0) {
+        throw new Error('Article not found');
+      }
+
+      const currentCount = article[0].bookmarkCount;
+      const newCount = action === 'increment' ? currentCount + 1 : Math.max(0, currentCount - 1);
+
+      // Update bookmark count
+      await db
+        .update(articles)
+        .set({ bookmarkCount: newCount })
+        .where(eq(articles.id, articleId));
+
+      logger.info(`✅ Bookmark ${action}ed for article ${articleId}: ${currentCount} → ${newCount}`);
+
+      return { success: true, bookmarkCount: newCount };
+    } catch (error: any) {
+      logger.error(`❌ Failed to update bookmark: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get trending articles sorted by bookmark count (highest first)
+   */
+  async getTrendingArticles(limit: number = 10, offset: number = 0) {
+    return db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        content: articles.content,
+        url: articles.url,
+        imageUrl: articles.imageUrl,
+        bookmarkCount: articles.bookmarkCount,
+      })
+      .from(articles)
+      .limit(limit)
+      .offset(offset)
+      .orderBy(desc(articles.bookmarkCount));
   }
 }
 

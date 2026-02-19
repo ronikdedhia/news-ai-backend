@@ -1,58 +1,52 @@
-# ===== Dependencies =====
+# Dependencies
 node_modules/
 
-# ===== Environment files =====
+# Environment variables
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
 
-# ===== Package manager files (if you REALLY want to ignore them) =====
-# ⚠️ Usually package.json SHOULD be committed
-# Remove these lines if working in a team
-package.json
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# Build output
+dist/
+build/
 
-# ===== Logs =====
+# Logs
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# ===== Runtime data =====
+# Runtime
 pids/
 *.pid
 *.seed
 
-# ===== Build output =====
-dist/
-build/
-out/
-
-# ===== Cache =====
+# Cache
 .cache/
 .npm/
 .eslintcache
 coverage/
 
-# ===== OS / Editor junk =====
+# OS
 .DS_Store
 Thumbs.db
+
+# IDE
 .idea/
 .vscode/
 *.swp
+*.swo
 
-# ===== Secrets & keys =====
+# Secrets
 *.pem
 *.key
 *.crt
 *.pfx
 
-# ===== Docker =====
+# Docker overrides
 docker-compose.override.yml
 
-# ===== Temporary files =====
+# Temp files
 tmp/
 temp/

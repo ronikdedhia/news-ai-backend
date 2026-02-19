@@ -65,6 +65,26 @@ export interface SummarizeResponse {
   summary: string;
 }
 
+// Zod schemas for LLM output validation
+export const SummarizedTitleSchema = z.string()
+  .min(1, 'Title cannot be empty')
+  .max(100, 'Title must be max 100 characters')
+  .refine(
+    (title) => title.split(/\s+/).length <= 8,
+    'Title must contain max 8 words'
+  );
+
+export const SummarizedContentSchema = z.string()
+  .min(10, 'Summary must be at least 10 characters')
+  .max(500, 'Summary must be max 750 characters')
+  .refine(
+    (content) => content.split(/\s+/).length <= 100,
+    'Summary must contain max 100 words'
+  );
+
+export type SummarizedTitle = z.infer<typeof SummarizedTitleSchema>;
+export type SummarizedContent = z.infer<typeof SummarizedContentSchema>;
+
 export interface CronJobResult {
   timestamp: string;
   articlesProcessed: number;

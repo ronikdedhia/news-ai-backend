@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { articleService } from './article.service';
+import { groqService } from './groq.service';
 import { NewArticle } from '../db/schema';
 import { Article, FetchNewsResponse, SummarizeResponse } from '../types';
 import { config } from '../config';
@@ -86,14 +87,26 @@ class PipelineService {
           let summary = article.description || '';
 
           if (!summary && article.content && article.content !== 'ONLY AVAILABLE IN PAID PLANS') {
-            logger.info(`📝 Summarizing: ${article.title}`);
+            logger.info(`📝 Summarizing content: ${article.title}`);
             summary = await this.summarizeContent(article.content);
-            // Add small delay to avoid rate limiting
             await this.delay(100);
           }
 
+          // Summarize title to max 5 words
+          let summarizedTitle = article.title;
+          try {
+            logger.info(`📝 Summarizing title: ${article.title}`);
+            summarizedTitle = await groqService.summarizeTitle(article.title);
+            logger.info(`✅ Title summarized: "${article.title}" → "${summarizedTitle}"`);
+            await this.delay(100);
+          } catch (error: any) {
+            logger.warn(`⚠️ Title summarization failed, using original: ${error.message}`);
+            // Fallback: just use original title (it will be validated on save)
+            summarizedTitle = article.title;
+          }
+
           articlesToSave.push({
-            title: article.title,
+            title: summarizedTitle,
             content: summary,
             url: article.url,
             imageUrl: article.imageUrl,

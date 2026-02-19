@@ -5,6 +5,7 @@ export const articles = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     title: text('title').notNull(),
+    // title: text('summarized_title'),
     content: text('content'),
     url: text('url').notNull().unique(),
     imageUrl: text('image_url'),
@@ -13,6 +14,7 @@ export const articles = pgTable(
   },
   (table) => ({
     urlIdx: index('articles_url_key').on(table.url),
+    publishedAtIdx: index('articles_published_at_key').on(table.publishedAt),
   })
 );
 

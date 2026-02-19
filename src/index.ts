@@ -169,6 +169,58 @@ app.get('/api/articles', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint: Update bookmark count (increment/decrement)
+app.post('/api/articles/:id/bookmark', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { action } = req.body as { action: string };
+
+    if (!action || !['increment', 'decrement'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Action must be "increment" or "decrement"',
+      });
+    }
+
+    const result = await articleService.updateBookmarkCount(id, action as 'increment' | 'decrement');
+
+    res.json({
+      success: true,
+      articleId: id,
+      bookmarkCount: result.bookmarkCount,
+      action,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Get trending articles (sorted by bookmarks)
+app.get('/api/articles/trending', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const trendingArticles = await articleService.getTrendingArticles(limit, offset);
+
+    res.json({
+      success: true,
+      count: trendingArticles.length,
+      articles: trendingArticles,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({
