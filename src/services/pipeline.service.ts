@@ -2,6 +2,7 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { articleService } from './article.service';
 import { groqService } from './groq.service';
+import { hashtagService } from './hashtag.service';
 import { NewArticle } from '../db/schema';
 import { Article, FetchNewsResponse, SummarizeResponse } from '../types';
 import { config } from '../config';
@@ -101,13 +102,25 @@ class PipelineService {
             await this.delay(100);
           } catch (error: any) {
             logger.warn(`⚠️ Title summarization failed, using original: ${error.message}`);
-            // Fallback: just use original title (it will be validated on save)
             summarizedTitle = article.title;
+          }
+
+          // Generate hashtags from summarized title
+          let hashtags: string[] = [];
+          try {
+            logger.info(`🏷️ Generating hashtags for: "${summarizedTitle}"`);
+            hashtags = await hashtagService.generateHashtags(summarizedTitle);
+            logger.info(`✅ Hashtags generated: ${hashtags.join(', ')}`);
+            await this.delay(100);
+          } catch (error: any) {
+            logger.warn(`⚠️ Hashtag generation failed: ${error.message}`);
+            hashtags = [];
           }
 
           articlesToSave.push({
             title: summarizedTitle,
             content: summary,
+            hashtags,
             url: article.url,
             imageUrl: article.imageUrl,
             publishedAt: article.publishedAt,

@@ -61,7 +61,7 @@ class ArticleService {
   }
 
   /**
-   * Get all articles with pagination - returns title, content, url, imageUrl
+   * Get all articles with pagination - returns title, content, url, imageUrl, hashtags
    * Sorted by latest publishedAt first
    */
   async getArticles(limit: number = 10, offset: number = 0) {
@@ -70,6 +70,7 @@ class ArticleService {
         id: articles.id,
         title: articles.title,
         content: articles.content,
+        hashtags: articles.hashtags,
         url: articles.url,
         imageUrl: articles.imageUrl,
       })
@@ -134,6 +135,7 @@ class ArticleService {
         id: articles.id,
         title: articles.title,
         content: articles.content,
+        hashtags: articles.hashtags,
         url: articles.url,
         imageUrl: articles.imageUrl,
         bookmarkCount: articles.bookmarkCount,
