@@ -8,14 +8,15 @@ import { newsFetcherAgent } from './agents/news-fetcher.agent';
 import { summarizationAgent } from './agents/summarization.agent';
 import { initializeNewsPipeline, triggerNewsPipelineManually } from './cron/news-pipeline.cron';
 import { articleService } from './services/article.service';
+import { userService } from './services/user.service';
 import { initializeDatabase } from './db/client';
+import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
 
 const app = express();
 
 // Middleware
 app.use(helmet());
 app.use(cors());
-// app.use(compression());
 app.use(express.json());
 
 // Rate limiting
@@ -177,18 +178,65 @@ app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Get all articles
-app.get('/api/articles', async (req: Request, res: Response) => {
+// Endpoint: Get all articles (with free tier limit)
+app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const articles = await articleService.getArticles(limit, offset);
+    // If user is authenticated, they get unlimited access
+    if (req.user) {
+      // Auto-create user if doesn't exist
+      let user = await userService.getUserById(req.user.id);
+      if (!user) {
+        try {
+          user = await userService.createOrUpdateUser({
+            id: req.user.id,
+            email: req.user.email,
+            firstName: req.user.firstName,
+            lastName: req.user.lastName,
+          });
+        } catch (error: any) {
+          logger.warn('Could not create user:', error.message);
+        }
+      }
 
-    res.json({
+      // Premium users: unlimited access
+      const articles = await articleService.getArticles(limit, offset);
+
+      // Track article views
+      await userService.incrementArticlesViewed(req.user.id);
+
+      return res.json({
+        success: true,
+        count: articles.length,
+        articles,
+        tier: 'premium',
+      });
+    }
+
+    // Free tier (not logged in): only first 10 articles
+    const FREE_TIER_LIMIT = 10;
+    
+    if (offset >= FREE_TIER_LIMIT) {
+      return res.status(403).json({
+        success: false,
+        error: 'Free tier limited to first 10 articles. Please sign in to continue reading.',
+        requiresAuth: true,
+      });
+    }
+
+    // Calculate how many articles we can return
+    const remainingArticles = FREE_TIER_LIMIT - offset;
+    const articlesToFetch = Math.min(limit, remainingArticles);
+    
+    const articles = await articleService.getArticles(articlesToFetch, offset);
+    return res.json({
       success: true,
       count: articles.length,
       articles,
+      tier: 'free',
+      totalAvailable: FREE_TIER_LIMIT,
     });
   } catch (error: any) {
     logger.error('API Error:', error);
@@ -219,6 +267,90 @@ app.post('/api/articles/:id/bookmark', async (req: Request, res: Response) => {
       articleId: id,
       bookmarkCount: result.bookmarkCount,
       action,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Sync user from Clerk
+app.post('/api/auth/sync-user', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    // Get email from request body (sent by frontend)
+    const { email, firstName, lastName } = req.body;
+
+    const user = await userService.createOrUpdateUser({
+      id: req.user.id,
+      email: email || req.user.email,
+      firstName: firstName || req.user.firstName,
+      lastName: lastName || req.user.lastName,
+    });
+
+    res.json({
+      success: true,
+      user,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Get current user info
+app.get('/api/auth/me', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const user = await userService.getUserById(req.user.id);
+
+    res.json({
+      success: true,
+      user,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Upgrade to premium (webhook from payment provider)
+app.post('/api/auth/upgrade-premium', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const user = await userService.upgradeToPremium(req.user.id);
+
+    res.json({
+      success: true,
+      message: 'User upgraded to premium',
+      user,
     });
   } catch (error: any) {
     logger.error('API Error:', error);

@@ -18,12 +18,61 @@ export interface FetchNewsResponse {
   success: boolean
   count: number
   articles: Article[]
+  tier?: 'free' | 'premium'
+  totalAvailable?: number
+  requiresAuth?: boolean
+}
+
+export interface User {
+  id: string
+  email: string
+  firstName?: string
+  lastName?: string
+  isPremium: boolean
+  articlesViewedCount: number
 }
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
 })
+
+export const fetchArticles = async (limit: number = 10, offset: number = 0): Promise<{ articles: Article[], count: number, tier: string, requiresAuth?: boolean }> => {
+  try {
+    const response = await apiClient.get<FetchNewsResponse>('/api/articles', {
+      params: { limit, offset }
+    })
+    
+    if (response.data.requiresAuth) {
+      return {
+        articles: [],
+        count: 0,
+        tier: 'free',
+        requiresAuth: true
+      }
+    }
+    
+    if (response.data.success) {
+      return {
+        articles: response.data.articles,
+        count: response.data.count,
+        tier: response.data.tier || 'free'
+      }
+    }
+    throw new Error('Failed to fetch articles')
+  } catch (error: any) {
+    if (error.response?.status === 403 && error.response?.data?.requiresAuth) {
+      return {
+        articles: [],
+        count: 0,
+        tier: 'free',
+        requiresAuth: true
+      }
+    }
+    console.error('Error fetching articles:', error)
+    throw error
+  }
+}
 
 export const fetchTrendingNews = async (limit: number = 20, offset: number = 0): Promise<{ articles: Article[], count: number }> => {
   try {
@@ -39,6 +88,26 @@ export const fetchTrendingNews = async (limit: number = 20, offset: number = 0):
     throw new Error('Failed to fetch trending news')
   } catch (error) {
     console.error('Error fetching trending news:', error)
+    throw error
+  }
+}
+
+export const syncUser = async (userData: { email: string; firstName?: string; lastName?: string }): Promise<User> => {
+  try {
+    const response = await apiClient.post('/api/auth/sync-user', userData)
+    return response.data.user
+  } catch (error) {
+    console.error('Error syncing user:', error)
+    throw error
+  }
+}
+
+export const getCurrentUser = async (): Promise<User> => {
+  try {
+    const response = await apiClient.get('/api/auth/me')
+    return response.data.user
+  } catch (error) {
+    console.error('Error fetching current user:', error)
     throw error
   }
 }
