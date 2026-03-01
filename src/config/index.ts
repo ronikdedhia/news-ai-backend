@@ -15,6 +15,9 @@ export const config = {
     apiKey: process.env.GROQ_API_KEY || '',
     model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
   },
+  huggingface: {
+    apiKey: process.env.HUGGING_FACE_API_KEY || '',
+  },
   database: {
     url: process.env.DATABASE_URL,
   },
@@ -25,6 +28,10 @@ export const config = {
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
+  },
+  telegram: {
+    accessToken: process.env.TELEGRAM_ACCESS_TOKEN || '',
+    channelId: process.env.TELEGRAM_CHANNEL_ID || '',
   },
 };
 
@@ -39,4 +46,9 @@ for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     throw new Error(`Missing required environment variable: ${envVar}`);
   }
+}
+
+// Warn if optional but recommended env vars are missing
+if (!process.env.HUGGING_FACE_API_KEY) {
+  console.warn('⚠️  HUGGING_FACE_API_KEY not set - hashtag generation will fail. Add it to .env to enable hashtag feature.');
 }

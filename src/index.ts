@@ -94,6 +94,36 @@ app.post('/api/test/summarize', async (req: Request, res: Response) => {
   }
 });
 
+// Test endpoint: Generate hashtags
+app.post('/api/test/generate-hashtags', async (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Text is required in request body',
+      });
+    }
+
+    logger.info(`📡 API: Generating hashtags...`);
+
+    const { hashtagService } = await import('./services/hashtag.service');
+    const hashtags = await hashtagService.generateHashtags(text);
+
+    res.json({
+      success: true,
+      hashtags,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // Main endpoint: Fetch + Summarize
 app.post('/api/fetch-and-summarize', async (req: Request, res: Response) => {
   try {
@@ -250,10 +280,10 @@ const server = app.listen(PORT, async () => {
   const dbConnected = await initializeDatabase();
   
   if (!dbConnected) {
-    logger.error('❌ Failed to connect to database. Exiting...');
-    process.exit(1);
+    logger.warn('⚠️  Database connection failed. Running in API-only mode (no cron jobs or persistence).');
+    logger.warn('💡 Tip: You can still test API endpoints, but data won\'t be saved.');
+  } else {
+    // Initialize cron jobs only if database is ready
+    initializeNewsPipeline();
   }
-
-  // Initialize cron jobs after database is ready
-  initializeNewsPipeline();
 });

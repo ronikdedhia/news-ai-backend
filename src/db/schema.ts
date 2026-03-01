@@ -5,8 +5,8 @@ export const articles = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     title: text('title').notNull(),
-    // title: text('summarized_title'),
     content: text('content'),
+    hashtags: text('hashtags').array().default([]), // Array of hashtags
     url: text('url').notNull().unique(),
     imageUrl: text('image_url'),
     publishedAt: timestamp('published_at').notNull().defaultNow(),

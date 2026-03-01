@@ -48,7 +48,7 @@ async function executeNewsJob() {
     const result = await pipelineService.executePipeline();
 
     logger.info(`✅ News pipeline job completed`);
-    logger.info(`📈 Results: ${result.processed} processed, ${result.saved} saved, ${result.errors} errors`);
+    logger.info(`📈 Results: ${result.processed} processed, ${result.saved} saved, ${result.telegramSent} Telegram sent, ${result.errors} errors`);
   } catch (error: any) {
     logger.error(`❌ News pipeline job failed: ${error.message}`);
   }

@@ -6,10 +6,16 @@ import { logger } from '../utils/logger';
 class ArticleService {
   /**
    * Save articles to database, skipping duplicates
+   * Returns saved articles directly to avoid additional database reads
    */
-  async saveArticles(newArticles: NewArticle[]): Promise<{ saved: number; skipped: number }> {
+  async saveArticles(newArticles: NewArticle[]): Promise<{ 
+    saved: number; 
+    skipped: number;
+    savedArticles: Array<{ title: string; content: string | null; hashtags: string[]; url: string; imageUrl: string | null }>;
+  }> {
     let saved = 0;
     let skipped = 0;
+    const savedArticles: Array<{ title: string; content: string | null; hashtags: string[]; url: string; imageUrl: string | null }> = [];
 
     for (const article of newArticles) {
       try {
@@ -47,6 +53,15 @@ class ArticleService {
         
         saved++;
         logger.info(`✅ Article saved: ${article.title}`);
+        
+        // Add to savedArticles array to avoid additional read
+        savedArticles.push({
+          title: article.title,
+          content: article.content || null,
+          hashtags: article.hashtags || [],
+          url: article.url,
+          imageUrl: article.imageUrl || null,
+        });
       } catch (error: any) {
         logger.error(`❌ Failed to save article "${article.title}"`);
         logger.error(`   Error: ${error.message}`);
@@ -57,11 +72,11 @@ class ArticleService {
       }
     }
 
-    return { saved, skipped };
+    return { saved, skipped, savedArticles };
   }
 
   /**
-   * Get all articles with pagination - returns title, content, url, imageUrl
+   * Get all articles with pagination - returns title, content, url, imageUrl, hashtags
    * Sorted by latest publishedAt first
    */
   async getArticles(limit: number = 10, offset: number = 0) {
@@ -70,6 +85,7 @@ class ArticleService {
         id: articles.id,
         title: articles.title,
         content: articles.content,
+        hashtags: articles.hashtags,
         url: articles.url,
         imageUrl: articles.imageUrl,
       })
@@ -107,7 +123,7 @@ class ArticleService {
         throw new Error('Article not found');
       }
 
-      const currentCount = article[0].bookmarkCount;
+      const currentCount = article[0].bookmarkCount as number;
       const newCount = action === 'increment' ? currentCount + 1 : Math.max(0, currentCount - 1);
 
       // Update bookmark count
@@ -134,6 +150,7 @@ class ArticleService {
         id: articles.id,
         title: articles.title,
         content: articles.content,
+        hashtags: articles.hashtags,
         url: articles.url,
         imageUrl: articles.imageUrl,
         bookmarkCount: articles.bookmarkCount,

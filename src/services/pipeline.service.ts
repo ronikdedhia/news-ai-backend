@@ -2,6 +2,8 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { articleService } from './article.service';
 import { groqService } from './groq.service';
+import { hashtagService } from './hashtag.service';
+import { telegramService } from './telegram.service';
 import { NewArticle } from '../db/schema';
 import { Article, FetchNewsResponse, SummarizeResponse } from '../types';
 import { config } from '../config';
@@ -64,12 +66,13 @@ class PipelineService {
   }
 
   /**
-   * Main pipeline: fetch → summarize → save
+   * Main pipeline: fetch → summarize → save → send to Telegram
    */
-  async executePipeline(): Promise<{ processed: number; saved: number; errors: number }> {
+  async executePipeline(): Promise<{ processed: number; saved: number; errors: number; telegramSent: number }> {
     const startTime = Date.now();
     let processed = 0;
     let errors = 0;
+    let telegramSent = 0;
 
     try {
       logger.info('🚀 Starting news pipeline...');
@@ -92,6 +95,12 @@ class PipelineService {
             await this.delay(100);
           }
 
+          // Skip articles with no content available
+          if (!summary || summary === 'ONLY AVAILABLE IN PAID PLANS') {
+            logger.warn(`⏭️ Skipping article (no content available): ${article.title}`);
+            continue;
+          }
+
           // Summarize title to max 5 words
           let summarizedTitle = article.title;
           try {
@@ -101,13 +110,25 @@ class PipelineService {
             await this.delay(100);
           } catch (error: any) {
             logger.warn(`⚠️ Title summarization failed, using original: ${error.message}`);
-            // Fallback: just use original title (it will be validated on save)
             summarizedTitle = article.title;
+          }
+
+          // Generate hashtags from summarized title
+          let hashtags: string[] = [];
+          try {
+            logger.info(`🏷️ Generating hashtags for: "${summarizedTitle}"`);
+            hashtags = await hashtagService.generateHashtags(summarizedTitle);
+            logger.info(`✅ Hashtags generated: ${hashtags.join(', ')}`);
+            await this.delay(100);
+          } catch (error: any) {
+            logger.warn(`⚠️ Hashtag generation failed: ${error.message}`);
+            hashtags = [];
           }
 
           articlesToSave.push({
             title: summarizedTitle,
             content: summary,
+            hashtags,
             url: article.url,
             imageUrl: article.imageUrl,
             publishedAt: article.publishedAt,
@@ -119,17 +140,39 @@ class PipelineService {
         }
       }
 
-      // Step 3: Save to database
+      // Step 3: Save to database and get saved articles directly
       const result = await articleService.saveArticles(articlesToSave);
+
+      // Step 4: Send saved articles to Telegram
+      if (result.savedArticles.length > 0) {
+        logger.info(`📤 Sending ${result.savedArticles.length} articles to Telegram...`);
+        
+        const telegramMessages = result.savedArticles.map(article => ({
+          title: article.title,
+          content: article.content || 'No content available',
+          hashtags: article.hashtags,
+          url: article.url,
+          imageUrl: article.imageUrl,
+        }));
+
+        const telegramResult = await telegramService.sendMessages(telegramMessages);
+        telegramSent = telegramResult.sent;
+
+        if (telegramResult.failed > 0) {
+          logger.warn(`⚠️ ${telegramResult.failed} Telegram messages failed to send`);
+        }
+      }
+
       const duration = Date.now() - startTime;
 
       logger.info(`✅ Pipeline completed in ${duration}ms`);
-      logger.info(`📊 Summary: ${result.saved} saved, ${result.skipped} skipped, ${errors} errors`);
+      logger.info(`📊 Summary: ${result.saved} saved, ${result.skipped} skipped, ${errors} errors, ${telegramSent} Telegram messages sent`);
 
       return {
         processed,
         saved: result.saved,
         errors,
+        telegramSent,
       };
     } catch (error: any) {
       logger.error(`❌ Pipeline failed: ${error.message}`);
