@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import Image from 'next/image'
-import { ExternalLink, Newspaper } from 'lucide-react'
+import { ExternalLink, Newspaper, Volume2, Square } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { truncateText } from '@/lib/utils'
@@ -12,7 +13,28 @@ interface NewsCardProps {
 }
 
 export function NewsCard({ article }: NewsCardProps) {
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const hasImage = article.imageUrl && article.imageUrl.trim() !== ''
+
+  const handleTextToSpeech = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
+    }
+
+    const textToSpeak = `${article.title}. ${article.description || article.content}`
+    const utterance = new SpeechSynthesisUtterance(textToSpeak)
+    utterance.rate = 1
+    utterance.pitch = 1
+    utterance.volume = 1
+
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+
+    setIsSpeaking(true)
+    window.speechSynthesis.speak(utterance)
+  }
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
@@ -53,22 +75,41 @@ export function NewsCard({ article }: NewsCardProps) {
           {truncateText(article.description || article.content, 150) || 'No description available'}
         </p>
 
-        {/* Read More Button */}
-        <Button
-          asChild
-          variant="default"
-          className="w-full"
-        >
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2"
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <Button
+            onClick={handleTextToSpeech}
+            variant={isSpeaking ? "destructive" : "outline"}
+            className="flex-1 flex items-center justify-center gap-2"
           >
-            Read Full Article
-            <ExternalLink className="w-4 h-4" />
-          </a>
-        </Button>
+            {isSpeaking ? (
+              <>
+                <Square className="w-4 h-4" />
+                Stop
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-4 h-4" />
+                Listen
+              </>
+            )}
+          </Button>
+          <Button
+            asChild
+            variant="default"
+            className="flex-1"
+          >
+            <a
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2"
+            >
+              Read Full Article
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )
