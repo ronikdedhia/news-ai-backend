@@ -71,8 +71,8 @@ export function NewsCard({ article }: NewsCardProps) {
         </h3>
 
         {/* Description */}
-        <p className="text-sm text-muted-foreground mb-4 line-clamp-3 flex-1">
-          {truncateText(article.description || article.content, 150) || 'No description available'}
+        <p className="text-sm text-muted-foreground mb-4 flex-1 whitespace-pre-wrap">
+          {article.description || article.content || 'No description available'}
         </p>
 
         {/* Action Buttons */}
