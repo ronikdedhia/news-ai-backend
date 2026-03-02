@@ -4,15 +4,18 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { useApiClient } from '@/lib/useApiClient'
 import { fetchArticles, Article, syncUser } from '@/lib/api'
+import { saveArticlesOffline, getOfflineArticles } from '@/lib/offlineStorage'
+import { useOffline } from '@/lib/useOffline'
 import { NewsCard } from './NewsCard'
 import { CategoryFilter } from './CategoryFilter'
-import { AlertCircle, Lock } from 'lucide-react'
+import { AlertCircle, Lock, Wifi, WifiOff } from 'lucide-react'
 import { Button } from './ui/button'
 
 export function NewsFeed() {
   const { isSignedIn } = useAuth()
   const { user: clerkUser } = useUser()
   useApiClient()
+  const isOnline = useOffline()
   
   const [articles, setArticles] = useState<(Article & { isBookmarked?: boolean })[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -23,6 +26,7 @@ export function NewsFeed() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [tier, setTier] = useState<'free' | 'premium'>('free')
   const [requiresAuth, setRequiresAuth] = useState(false)
+  const [isOfflineMode, setIsOfflineMode] = useState(false)
   const observerTarget = useRef<HTMLDivElement>(null)
   const hasInitialized = useRef(false)
 
@@ -57,6 +61,15 @@ export function NewsFeed() {
       
       if (newOffset === 0) {
         setArticles(data.articles)
+        // Save articles offline
+        try {
+          await saveArticlesOffline(data.articles)
+          console.log('[NewsFeed] Articles saved offline')
+        } catch (err) {
+          console.error('[NewsFeed] Error saving offline:', err)
+        }
+        setIsOfflineMode(false)
+        
         if (!isSignedIn && data.articles.length >= FREE_TIER_LIMIT) {
           setOffset(FREE_TIER_LIMIT)
           setHasMore(false)
@@ -74,19 +87,47 @@ export function NewsFeed() {
           setRequiresAuth(true)
         } else {
           setArticles(newArticles)
+          // Save all articles offline
+          try {
+            await saveArticlesOffline(newArticles)
+            console.log('[NewsFeed] Articles saved offline')
+          } catch (err) {
+            console.error('[NewsFeed] Error saving offline:', err)
+          }
           setOffset(newOffset + LIMIT)
           setHasMore(data.count === LIMIT)
         }
       }
     } catch (err) {
+      console.error('[NewsFeed] Network error:', err)
+      
+      // If offline, try to load from cache
+      if (!isOnline) {
+        console.log('[NewsFeed] Offline detected, loading from cache...')
+        try {
+          const offlineArticles = await getOfflineArticles()
+          console.log('[NewsFeed] Loaded', offlineArticles.length, 'offline articles')
+          if (offlineArticles.length > 0) {
+            setArticles(offlineArticles)
+            setIsOfflineMode(true)
+            setError(null)
+            setHasMore(false)
+            setLoading(false)
+            setIsLoadingMore(false)
+            return
+          }
+        } catch (cacheErr) {
+          console.error('[NewsFeed] Error loading offline articles:', cacheErr)
+        }
+      }
+      
       setError(err instanceof Error ? err.message : 'Failed to load news')
-      console.error('Error loading news:', err)
       setHasMore(false)
     } finally {
       setLoading(false)
       setIsLoadingMore(false)
     }
-  }, [isSignedIn, articles, LIMIT])
+  }, [isSignedIn, articles, LIMIT, isOnline])
 
   useEffect(() => {
     if (isSignedIn && clerkUser) {
@@ -100,12 +141,32 @@ export function NewsFeed() {
     }
   }, [isSignedIn, clerkUser])
 
+  // Load offline articles on mount if offline
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true
-      loadNews(0)
+      
+      // If offline, try to load cached articles first
+      if (!isOnline) {
+        console.log('[NewsFeed] App started offline, loading cached articles...')
+        getOfflineArticles().then((offlineArticles) => {
+          if (offlineArticles.length > 0) {
+            console.log('[NewsFeed] Loaded', offlineArticles.length, 'offline articles')
+            setArticles(offlineArticles)
+            setIsOfflineMode(true)
+            setLoading(false)
+            setHasMore(false)
+            return
+          }
+          // If no cached articles, try to load from network
+          loadNews(0)
+        })
+      } else {
+        // Online, load from network
+        loadNews(0)
+      }
     }
-  }, [loadNews])
+  }, [isOnline, loadNews])
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -186,6 +247,19 @@ export function NewsFeed() {
 
   return (
     <div className="space-y-6">
+      {/* Offline Indicator */}
+      {!isOnline && (
+        <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 flex items-center gap-3">
+          <WifiOff className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+          <div>
+            <p className="font-semibold text-yellow-900 dark:text-yellow-100">You're offline</p>
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              {isOfflineMode ? 'Showing cached articles' : 'Connect to internet to load new articles'}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Latest News</h2>

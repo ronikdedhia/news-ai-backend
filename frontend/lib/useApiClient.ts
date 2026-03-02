@@ -11,12 +11,16 @@ export function useApiClient() {
     // Set up interceptor with token
     const interceptor = apiClient.interceptors.request.use(async (config) => {
       try {
-        const token = await getToken()
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`
+        // Only try to get token if online
+        if (navigator.onLine) {
+          const token = await getToken()
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`
+          }
         }
       } catch (error) {
-        console.error('Error getting auth token:', error)
+        console.error('[useApiClient] Error getting auth token:', error)
+        // Continue without token if offline
       }
       return config
     })
