@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
 import { logger } from '../utils/logger';
+import * as schema from './schema';
 
 const connectionString = process.env.DATABASE_URL;
 const authToken = process.env.DATABASE_AUTH_TOKEN;
@@ -19,8 +20,8 @@ const client = createClient({
   authToken: authToken,
 });
 
-// Initialize Drizzle ORM
-export const db = drizzle(client);
+// Initialize Drizzle ORM with schema
+export const db = drizzle(client, { schema });
 
 // Test connection on startup
 export async function initializeDatabase() {

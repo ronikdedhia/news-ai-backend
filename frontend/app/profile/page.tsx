@@ -6,6 +6,7 @@ import { useApiClient } from '@/lib/useApiClient'
 import { getCurrentUser, getUserBookmarks, Article } from '@/lib/api'
 import { NewsCard } from '@/components/NewsCard'
 import { PreferencesManager } from '@/components/PreferencesManager'
+import { StreakWidget } from '@/components/StreakWidget'
 import { AlertCircle } from 'lucide-react'
 
 interface UserData {
@@ -155,6 +156,11 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground mb-1">Bookmarked Articles</p>
               <p className="font-semibold">{bookmarkCount}</p>
             </div>
+          </div>
+
+          <div className="border-t border-border pt-6">
+            <h2 className="text-lg font-semibold mb-4">Gamification</h2>
+            <StreakWidget />
           </div>
 
           <div className="border-t border-border pt-6">

@@ -8,6 +8,7 @@ import { initializeNewsPipeline, triggerNewsPipelineManually } from './cron/news
 import { articleService } from './services/article.service';
 import { userService } from './services/user.service';
 import { bookmarkService } from './services/bookmark.service';
+import { streakService } from './services/streak.service';
 import { initializeDatabase } from './db/client';
 import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
 
@@ -140,8 +141,9 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
         isBookmarked: bookmarkStatus[article.id] || false,
       }));
 
-      // Track article views
+      // Track article views and increment streak
       await userService.incrementArticlesViewed(req.user.id);
+      await streakService.incrementStreak(req.user.id);
 
       return res.json({
         success: true,
@@ -550,6 +552,31 @@ app.put('/api/auth/preferences', verifyClerkToken, async (req: Request, res: Res
       success: true,
       message: 'User preferences updated successfully',
       preferences: parsedPreferences,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Get user streak
+app.get('/api/auth/streak', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const streak = await streakService.getUserStreak(req.user.id);
+
+    res.json({
+      success: true,
+      streak,
     });
   } catch (error: any) {
     logger.error('API Error:', error);

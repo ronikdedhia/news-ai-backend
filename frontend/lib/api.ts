@@ -227,4 +227,14 @@ export const searchArticles = async (query: string, limit: number = 20, offset: 
   }
 }
 
+export const getUserStreak = async (): Promise<{ currentStreak: number, longestStreak: number, lastArticleReadDate: string | null, badges: string[] }> => {
+  try {
+    const response = await apiClient.get('/api/auth/streak')
+    return response.data.streak
+  } catch (error) {
+    console.error('Error fetching user streak:', error)
+    throw error
+  }
+}
+
 export default apiClient
