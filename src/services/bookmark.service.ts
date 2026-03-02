@@ -29,11 +29,26 @@ class BookmarkService {
         createdAt: new Date().toISOString(),
       });
 
-      // Increment bookmark count on article
-      await db
-        .update(articles)
-        .set({ bookmarkCount: articles.bookmarkCount + 1 })
-        .where(eq(articles.id, articleId));
+      // Get current bookmark count and increment
+      const article = await db
+        .select({ bookmarkCount: articles.bookmarkCount })
+        .from(articles)
+        .where(eq(articles.id, articleId))
+        .limit(1);
+
+      if (article.length > 0) {
+        const currentCount = article[0].bookmarkCount;
+        // Ensure currentCount is a valid number
+        const count = typeof currentCount === 'number' ? currentCount : 0;
+        const newCount = count + 1;
+        
+        logger.info(`Incrementing bookmark: current=${count}, new=${newCount}`);
+        
+        await db
+          .update(articles)
+          .set({ bookmarkCount: newCount })
+          .where(eq(articles.id, articleId));
+      }
 
       logger.info(`✅ Bookmark added: user=${userId}, article=${articleId}`);
       return { success: true, bookmarkId };
@@ -60,7 +75,13 @@ class BookmarkService {
         .limit(1);
 
       if (article.length > 0) {
-        const newCount = Math.max(0, (article[0].bookmarkCount as number) - 1);
+        const currentCount = article[0].bookmarkCount;
+        // Ensure currentCount is a valid number
+        const count = typeof currentCount === 'number' ? currentCount : 0;
+        const newCount = Math.max(0, count - 1);
+        
+        logger.info(`Decrementing bookmark: current=${count}, new=${newCount}`);
+        
         await db
           .update(articles)
           .set({ bookmarkCount: newCount })
@@ -107,6 +128,7 @@ class BookmarkService {
           url: articles.url,
           imageUrl: articles.imageUrl,
           bookmarkCount: articles.bookmarkCount,
+          category: articles.category,
           bookmarkedAt: userBookmarks.createdAt,
         })
         .from(userBookmarks)

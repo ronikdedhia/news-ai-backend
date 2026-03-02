@@ -31,6 +31,7 @@ export interface User {
   lastName?: string
   isPremium: boolean
   articlesViewedCount: number
+  createdAt?: string
 }
 
 const apiClient = axios.create({

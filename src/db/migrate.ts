@@ -67,6 +67,16 @@ async function runMigrations() {
       }
     }
 
+    // Ensure bookmark_count has no NULL values
+    try {
+      await client.execute(`
+        UPDATE articles SET bookmark_count = 0 WHERE bookmark_count IS NULL
+      `);
+      logger.info('✅ Fixed NULL bookmark_count values');
+    } catch (error: any) {
+      logger.warn('ℹ️  Could not update NULL bookmark_count values:', error.message);
+    }
+
     // Create user_bookmarks table
     await client.execute(`
       CREATE TABLE IF NOT EXISTS user_bookmarks (

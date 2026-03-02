@@ -46,7 +46,7 @@ export default function ProfilePage() {
           lastName: data.lastName,
           isPremium: data.isPremium ? 1 : 0,
           articlesViewedCount: data.articlesViewedCount,
-          createdAt: new Date().toISOString(),
+          createdAt: data.createdAt || new Date().toISOString(),
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load profile')

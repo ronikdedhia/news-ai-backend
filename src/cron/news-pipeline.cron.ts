@@ -18,7 +18,7 @@ export function initializeNewsPipeline() {
   });
 
   // 12:00 PM (12:00) - Fetch news
-  const noonJob = cron.schedule('0 12 * * *', async () => {
+  const noonJob = cron.schedule('27 10 * * *', async () => {
     logger.info('⏰ Cron triggered: Noon news pipeline');
     await executeNewsJob();
   });
