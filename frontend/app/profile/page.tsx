@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useApiClient } from '@/lib/useApiClient'
 import { getCurrentUser, getUserBookmarks, Article } from '@/lib/api'
 import { NewsCard } from '@/components/NewsCard'
+import { PreferencesManager } from '@/components/PreferencesManager'
 import { AlertCircle } from 'lucide-react'
 
 interface UserData {
@@ -27,6 +28,7 @@ export default function ProfilePage() {
   const [bookmarksLoading, setBookmarksLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showBookmarks, setShowBookmarks] = useState(false)
+  const [activeTab, setActiveTab] = useState<'preferences' | 'bookmarks'>('preferences')
 
   useEffect(() => {
     if (!isLoaded) return
@@ -66,13 +68,18 @@ export default function ProfilePage() {
       const data = await getUserBookmarks(20, 0)
       setBookmarks(data.bookmarks)
       setBookmarkCount(data.count)
-      setShowBookmarks(true)
     } catch (err) {
       console.error('Error loading bookmarks:', err)
     } finally {
       setBookmarksLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (activeTab === 'bookmarks' && bookmarks.length === 0) {
+      loadBookmarks()
+    }
+  }, [activeTab])
 
   if (!isLoaded || loading) {
     return (
@@ -162,19 +169,38 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Bookmarks Section */}
-      {showBookmarks && (
-        <div className="bg-card border border-border rounded-lg p-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">Your Bookmarked Articles</h2>
-            <button
-              onClick={() => setShowBookmarks(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ✕
-            </button>
-          </div>
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6 border-b border-border">
+        <button
+          onClick={() => setActiveTab('preferences')}
+          className={`px-4 py-2 font-semibold transition-colors ${
+            activeTab === 'preferences'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Preferences
+        </button>
+        <button
+          onClick={() => setActiveTab('bookmarks')}
+          className={`px-4 py-2 font-semibold transition-colors ${
+            activeTab === 'bookmarks'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Bookmarks ({bookmarkCount})
+        </button>
+      </div>
 
+      {/* Preferences Tab */}
+      {activeTab === 'preferences' && (
+        <PreferencesManager />
+      )}
+
+      {/* Bookmarks Tab */}
+      {activeTab === 'bookmarks' && (
+        <div className="bg-card border border-border rounded-lg p-8">
           {bookmarksLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">

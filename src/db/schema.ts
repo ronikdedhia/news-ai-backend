@@ -52,9 +52,30 @@ export const userBookmarks = sqliteTable(
   })
 );
 
+export const userPreferences = sqliteTable(
+  'user_preferences',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().unique(),
+    preferredCategories: text('preferred_categories').notNull(), // JSON array
+    preferredLanguage: text('preferred_language').notNull().default('english'),
+    fontSize: text('font_size').notNull().default('medium'),
+    theme: text('theme').notNull().default('light'),
+    notificationsEnabled: integer('notifications_enabled').notNull().default(1),
+    emailDigestFrequency: text('email_digest_frequency').notNull().default('daily'),
+    createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+    updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
+  },
+  (table) => ({
+    userIdIdx: index('user_preferences_user_id_key').on(table.userId),
+  })
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Article = typeof articles.$inferSelect;
 export type NewArticle = typeof articles.$inferInsert;
 export type UserBookmark = typeof userBookmarks.$inferSelect;
 export type NewUserBookmark = typeof userBookmarks.$inferInsert;
+export type UserPreference = typeof userPreferences.$inferSelect;
+export type NewUserPreference = typeof userPreferences.$inferInsert;

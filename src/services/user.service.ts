@@ -2,6 +2,7 @@ import { db } from '../db/client';
 import { users, NewUser, User } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from '../utils/logger';
+import { userPreferencesService, UserPreferencesData } from './user-preferences.service';
 
 export class UserService {
   async createOrUpdateUser(userData: {
@@ -10,6 +11,7 @@ export class UserService {
     firstName?: string;
     lastName?: string;
     profileImageUrl?: string;
+    preferences?: UserPreferencesData;
   }): Promise<User> {
     try {
       // Check if user exists
@@ -55,6 +57,12 @@ export class UserService {
 
       const created = await db.insert(users).values(newUser).returning();
       logger.info(`✅ New user created: ${userData.email}`);
+
+      // Create user preferences if provided
+      if (userData.preferences) {
+        await userPreferencesService.createUserPreferences(userData.id, userData.preferences);
+      }
+
       return created[0];
     } catch (error: any) {
       logger.error('Error creating/updating user:', error);

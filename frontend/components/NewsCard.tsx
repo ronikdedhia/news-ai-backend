@@ -127,22 +127,33 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
           {article.content || 'No content available'}
         </p>
 
+        {/* Hashtags */}
+        {article.hashtags && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {article.hashtags.split(/\s+/).filter(tag => tag.startsWith('#')).map((tag, idx) => (
+              <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full font-medium hover:bg-blue-100 transition-colors cursor-pointer">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Action Buttons */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full">
           <Button
             onClick={handleTextToSpeech}
             variant={isSpeaking ? "destructive" : "outline"}
-            className="flex-1 flex items-center justify-center gap-2"
+            className="flex-1 flex items-center justify-center gap-1 min-w-0 px-2 py-2 text-xs sm:text-sm"
           >
             {isSpeaking ? (
               <>
-                <Square className="w-4 h-4" />
-                Stop
+                <Square className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="truncate">Stop</span>
               </>
             ) : (
               <>
-                <Volume2 className="w-4 h-4" />
-                Listen
+                <Volume2 className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="truncate">Listen</span>
               </>
             )}
           </Button>
@@ -150,24 +161,24 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
             onClick={handleBookmarkClick}
             disabled={isLoadingBookmark}
             variant={isBookmarked ? "default" : "outline"}
-            className="flex-1 flex items-center justify-center gap-2"
+            className="flex-1 flex items-center justify-center gap-1 min-w-0 px-2 py-2 text-xs sm:text-sm"
           >
-            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-            {isBookmarked ? 'Saved' : 'Save'}
+            <Bookmark className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${isBookmarked ? 'fill-current' : ''}`} />
+            <span className="truncate">{isBookmarked ? 'Saved' : 'Save'}</span>
           </Button>
           <Button
             asChild
             variant="default"
-            className="flex-1"
+            className="flex-1 flex items-center justify-center gap-1 min-w-0 px-2 py-2 text-xs sm:text-sm"
           >
             <a
               href={article.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2"
+              className="flex items-center justify-center gap-1 min-w-0"
             >
-              Read Full Article
-              <ExternalLink className="w-4 h-4" />
+              <span className="truncate">Read</span>
+              <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
             </a>
           </Button>
         </div>

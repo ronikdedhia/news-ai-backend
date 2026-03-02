@@ -393,6 +393,173 @@ app.get('/api/bookmarks', verifyClerkToken, async (req: Request, res: Response) 
   }
 });
 
+// Endpoint: Create or update user preferences
+app.post('/api/auth/preferences', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const { preferredCategories, preferredLanguage, fontSize, theme, notificationsEnabled, emailDigestFrequency } = req.body;
+
+    // Validate required fields
+    if (!preferredCategories || !Array.isArray(preferredCategories) || preferredCategories.length !== 3) {
+      return res.status(400).json({
+        success: false,
+        error: 'Must select exactly 3 categories',
+      });
+    }
+
+    if (!preferredLanguage) {
+      return res.status(400).json({
+        success: false,
+        error: 'Preferred language is required',
+      });
+    }
+
+    const { userPreferencesService } = await import('./services/user-preferences.service');
+
+    try {
+      // Try to create preferences
+      const preferences = await userPreferencesService.createUserPreferences(req.user.id, {
+        preferredCategories,
+        preferredLanguage,
+        fontSize: fontSize || 'medium',
+        theme: theme || 'light',
+        notificationsEnabled: notificationsEnabled !== false,
+        emailDigestFrequency: emailDigestFrequency || 'daily',
+      });
+
+      res.json({
+        success: true,
+        message: 'User preferences created successfully',
+        preferences,
+      });
+    } catch (createError: any) {
+      // If preferences already exist, update them instead
+      if (createError.message?.includes('already exist')) {
+        const preferences = await userPreferencesService.updateUserPreferences(req.user.id, {
+          preferredCategories,
+          preferredLanguage,
+          fontSize: fontSize || 'medium',
+          theme: theme || 'light',
+          notificationsEnabled: notificationsEnabled !== false,
+          emailDigestFrequency: emailDigestFrequency || 'daily',
+        });
+
+        res.json({
+          success: true,
+          message: 'User preferences updated successfully',
+          preferences,
+        });
+      } else {
+        throw createError;
+      }
+    }
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Get user preferences
+app.get('/api/auth/preferences', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const { userPreferencesService } = await import('./services/user-preferences.service');
+    const preferences = await userPreferencesService.getUserPreferences(req.user.id);
+
+    if (!preferences) {
+      return res.status(404).json({
+        success: false,
+        error: 'User preferences not found',
+      });
+    }
+
+    // Parse JSON fields
+    const parsedPreferences = {
+      ...preferences,
+      preferredCategories: JSON.parse(preferences.preferredCategories),
+      notificationsEnabled: preferences.notificationsEnabled === 1,
+    };
+
+    res.json({
+      success: true,
+      preferences: parsedPreferences,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Update user preferences
+app.put('/api/auth/preferences', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const { preferredCategories, preferredLanguage, fontSize, theme, notificationsEnabled, emailDigestFrequency } = req.body;
+
+    // Validate categories if provided
+    if (preferredCategories && (!Array.isArray(preferredCategories) || preferredCategories.length !== 3)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Must select exactly 3 categories',
+      });
+    }
+
+    const { userPreferencesService } = await import('./services/user-preferences.service');
+
+    const preferences = await userPreferencesService.updateUserPreferences(req.user.id, {
+      preferredCategories,
+      preferredLanguage,
+      fontSize,
+      theme,
+      notificationsEnabled,
+      emailDigestFrequency,
+    });
+
+    // Parse JSON fields
+    const parsedPreferences = {
+      ...preferences,
+      preferredCategories: JSON.parse(preferences.preferredCategories),
+      notificationsEnabled: preferences.notificationsEnabled === 1,
+    };
+
+    res.json({
+      success: true,
+      message: 'User preferences updated successfully',
+      preferences: parsedPreferences,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({

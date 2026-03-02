@@ -10,6 +10,7 @@ export interface Article {
   publishedAt: string | Date
   imageUrl: string
   category?: string
+  hashtags?: string
 }
 
 export interface FetchNewsResponse {
@@ -29,6 +30,19 @@ export interface User {
   isPremium: boolean
   articlesViewedCount: number
   createdAt?: string
+}
+
+export interface UserPreferences {
+  id: string
+  userId: string
+  preferredCategories: string[]
+  preferredLanguage: 'english' | 'hindi' | 'marathi' | 'gujarati' | 'tamil' | 'spanish' | 'french' | 'german'
+  fontSize: 'small' | 'medium' | 'large'
+  theme: 'light' | 'dark'
+  notificationsEnabled: boolean
+  emailDigestFrequency: 'daily' | 'weekly' | 'never'
+  createdAt: string
+  updatedAt: string
 }
 
 const apiClient = axios.create({
@@ -107,6 +121,50 @@ export const getCurrentUser = async (): Promise<User> => {
     return response.data.user
   } catch (error) {
     console.error('Error fetching current user:', error)
+    throw error
+  }
+}
+
+export const createUserPreferences = async (preferences: {
+  preferredCategories: string[]
+  preferredLanguage: string
+  fontSize: string
+  theme: string
+  notificationsEnabled: boolean
+  emailDigestFrequency: string
+}): Promise<UserPreferences> => {
+  try {
+    const response = await apiClient.post('/api/auth/preferences', preferences)
+    return response.data.preferences
+  } catch (error) {
+    console.error('Error creating user preferences:', error)
+    throw error
+  }
+}
+
+export const getUserPreferences = async (): Promise<UserPreferences> => {
+  try {
+    const response = await apiClient.get('/api/auth/preferences')
+    return response.data.preferences
+  } catch (error) {
+    console.error('Error fetching user preferences:', error)
+    throw error
+  }
+}
+
+export const updateUserPreferences = async (preferences: Partial<{
+  preferredCategories: string[]
+  preferredLanguage: string
+  fontSize: string
+  theme: string
+  notificationsEnabled: boolean
+  emailDigestFrequency: string
+}>): Promise<UserPreferences> => {
+  try {
+    const response = await apiClient.put('/api/auth/preferences', preferences)
+    return response.data.preferences
+  } catch (error) {
+    console.error('Error updating user preferences:', error)
     throw error
   }
 }

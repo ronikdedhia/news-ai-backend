@@ -120,6 +120,43 @@ async function runMigrations() {
     `);
     logger.info('✅ Created index on user_bookmarks.article_id');
 
+    // Create user_preferences table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        preferred_categories TEXT NOT NULL,
+        preferred_language TEXT NOT NULL DEFAULT 'english',
+        font_size TEXT NOT NULL DEFAULT 'medium',
+        theme TEXT NOT NULL DEFAULT 'light',
+        notifications_enabled INTEGER NOT NULL DEFAULT 1,
+        email_digest_frequency TEXT NOT NULL DEFAULT 'daily',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+    logger.info('✅ Created user_preferences table');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user_id)
+    `);
+    logger.info('✅ Created index on user_preferences.user_id');
+
+    // Add hashtags column to articles if it doesn't exist
+    try {
+      await client.execute(`
+        ALTER TABLE articles ADD COLUMN hashtags TEXT
+      `);
+      logger.info('✅ Added hashtags column to articles table');
+    } catch (error: any) {
+      if (error.message.includes('duplicate column')) {
+        logger.info('ℹ️  Hashtags column already exists');
+      } else {
+        throw error;
+      }
+    }
+
     logger.info('✅ All migrations completed successfully!');
     process.exit(0);
   } catch (error: any) {
