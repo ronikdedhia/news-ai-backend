@@ -11,6 +11,7 @@ export const NewsDataArticleSchema = z.object({
   image_url: z.string().nullable(),
   source_name: z.string(),
   source_url: z.string(),
+  category: z.string().nullable(),
 });
 
 export const NewsDataResponseSchema = z.object({
@@ -33,6 +34,7 @@ export interface Article {
   imageUrl: string | null;
   sourceName: string;
   sourceUrl: string;
+  category: string | null;
 }
 
 export interface NewsArticle {
@@ -45,6 +47,7 @@ export interface NewsArticle {
   publishedAt: string;
   sourceName: string;
   sourceUrl: string;
+  category: string | null;
 }
 
 export interface FetchNewsResponse {

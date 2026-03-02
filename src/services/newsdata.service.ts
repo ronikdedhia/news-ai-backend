@@ -36,7 +36,7 @@ class NewsDataService {
           apikey: config.newsdata.apiKey,
           country: 'in',
           language: 'en',
-          category: 'education,entertainment,politics,sports,technology',
+          category: 'education,entertainment,politics,sports,technology,business,health,science,world,nation,lifestyle,opinion',
           timezone: 'asia/kolkata',
           image: 1,
           removeduplicate: 1,
@@ -60,6 +60,7 @@ class NewsDataService {
         imageUrl: item.image_url,
         sourceName: item.source_name,
         sourceUrl: item.source_url,
+        category: item.category,
       }));
 
       return articles;

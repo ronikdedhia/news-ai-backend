@@ -9,6 +9,24 @@ import { Button } from '@/components/ui/button'
 import { truncateText } from '@/lib/utils'
 import { Article, addBookmark, removeBookmark } from '@/lib/api'
 
+const getCategoryColor = (category: string): string => {
+  const colors: Record<string, string> = {
+    technology: 'bg-blue-100 text-blue-800',
+    business: 'bg-green-100 text-green-800',
+    sports: 'bg-red-100 text-red-800',
+    entertainment: 'bg-purple-100 text-purple-800',
+    health: 'bg-pink-100 text-pink-800',
+    science: 'bg-cyan-100 text-cyan-800',
+    education: 'bg-yellow-100 text-yellow-800',
+    politics: 'bg-orange-100 text-orange-800',
+    world: 'bg-indigo-100 text-indigo-800',
+    nation: 'bg-amber-100 text-amber-800',
+    lifestyle: 'bg-rose-100 text-rose-800',
+    opinion: 'bg-violet-100 text-violet-800',
+  }
+  return colors[category.toLowerCase()] || 'bg-gray-100 text-gray-800'
+}
+
 interface NewsCardProps {
   article: Article & { isBookmarked?: boolean }
   onBookmarkChange?: (isBookmarked: boolean) => void
@@ -89,12 +107,17 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
       </div>
 
       <CardContent className="flex-1 flex flex-col p-4">
-        {/* Source Badge */}
-        <div className="flex items-center gap-2 mb-3">
+        {/* Source Badge and Category */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <Newspaper className="w-4 h-4 text-accent" />
           <span className="text-xs font-semibold text-accent uppercase tracking-wide">
             {article.sourceName}
           </span>
+          {article.category && (
+            <span className={`text-xs font-semibold px-2 py-1 rounded-full uppercase tracking-wide ${getCategoryColor(article.category)}`}>
+              {article.category}
+            </span>
+          )}
         </div>
 
         {/* Title */}

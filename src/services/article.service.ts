@@ -11,11 +11,11 @@ class ArticleService {
   async saveArticles(newArticles: NewArticle[]): Promise<{ 
     saved: number; 
     skipped: number;
-    savedArticles: Array<{ title: string; content: string | null; hashtags: string[]; url: string; imageUrl: string | null }>;
+    savedArticles: Array<{ title: string; content: string | null; hashtags: string | null; url: string; imageUrl: string | null }>;
   }> {
     let saved = 0;
     let skipped = 0;
-    const savedArticles: Array<{ title: string; content: string | null; hashtags: string[]; url: string; imageUrl: string | null }> = [];
+    const savedArticles: Array<{ title: string; content: string | null; hashtags: string | null; url: string; imageUrl: string | null }> = [];
 
     for (const article of newArticles) {
       try {
@@ -43,12 +43,14 @@ class ArticleService {
 
         // Insert with explicit column mapping
         const result = await db.insert(articles).values({
+          id: article.id,
           title: article.title,
           content: article.content || null,
           url: article.url,
           imageUrl: article.imageUrl || null,
           publishedAt: article.publishedAt,
           bookmarkCount: article.bookmarkCount || 0,
+          category: article.category || null,
         });
         
         saved++;
@@ -58,7 +60,7 @@ class ArticleService {
         savedArticles.push({
           title: article.title,
           content: article.content || null,
-          hashtags: article.hashtags || [],
+          hashtags: article.hashtags || null,
           url: article.url,
           imageUrl: article.imageUrl || null,
         });
@@ -76,7 +78,7 @@ class ArticleService {
   }
 
   /**
-   * Get all articles with pagination - returns title, content, url, imageUrl, hashtags
+   * Get all articles with pagination - returns title, content, url, imageUrl, hashtags, category
    * Sorted by latest publishedAt first
    */
   async getArticles(limit: number = 10, offset: number = 0) {
@@ -88,6 +90,7 @@ class ArticleService {
         hashtags: articles.hashtags,
         url: articles.url,
         imageUrl: articles.imageUrl,
+        category: articles.category,
       })
       .from(articles)
       .limit(limit)
@@ -154,6 +157,7 @@ class ArticleService {
         url: articles.url,
         imageUrl: articles.imageUrl,
         bookmarkCount: articles.bookmarkCount,
+        category: articles.category,
       })
       .from(articles)
       .limit(limit)

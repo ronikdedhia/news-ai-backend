@@ -47,10 +47,25 @@ async function runMigrations() {
         url TEXT NOT NULL UNIQUE,
         image_url TEXT,
         published_at TEXT NOT NULL,
-        bookmark_count INTEGER NOT NULL DEFAULT 0
+        bookmark_count INTEGER NOT NULL DEFAULT 0,
+        category TEXT
       )
     `);
     logger.info('✅ Created articles table');
+
+    // Add category column if it doesn't exist (for existing databases)
+    try {
+      await client.execute(`
+        ALTER TABLE articles ADD COLUMN category TEXT
+      `);
+      logger.info('✅ Added category column to articles table');
+    } catch (error: any) {
+      if (error.message.includes('duplicate column')) {
+        logger.info('ℹ️  Category column already exists');
+      } else {
+        throw error;
+      }
+    }
 
     // Create user_bookmarks table
     await client.execute(`
@@ -81,6 +96,11 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)
     `);
     logger.info('✅ Created index on articles.published_at');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category)
+    `);
+    logger.info('✅ Created index on articles.category');
 
     await client.execute(`
       CREATE INDEX IF NOT EXISTS idx_user_bookmarks_user_id ON user_bookmarks(user_id)

@@ -31,10 +31,12 @@ export const articles = sqliteTable(
     imageUrl: text('image_url'),
     publishedAt: text('published_at').notNull(),
     bookmarkCount: integer('bookmark_count').notNull().default(0),
+    category: text('category'),
   },
   (table) => ({
     urlIdx: index('articles_url_key').on(table.url),
     publishedAtIdx: index('articles_published_at_key').on(table.publishedAt),
+    categoryIdx: index('articles_category_key').on(table.category),
   })
 );
 

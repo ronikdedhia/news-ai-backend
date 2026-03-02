@@ -12,6 +12,7 @@ export interface Article {
   imageUrl: string
   sourceName: string
   sourceUrl: string
+  category?: string
 }
 
 export interface FetchNewsResponse {
