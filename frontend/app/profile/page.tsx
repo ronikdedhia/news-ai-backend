@@ -51,6 +51,10 @@ export default function ProfilePage() {
           articlesViewedCount: data.articlesViewedCount,
           createdAt: data.createdAt || new Date().toISOString(),
         })
+        
+        // Load bookmarks count
+        const bookmarksData = await getUserBookmarks(1, 0)
+        setBookmarkCount(bookmarksData.count)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load profile')
       } finally {
@@ -152,7 +156,7 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground mb-1">Articles Viewed</p>
               <p className="font-semibold">{userData?.articlesViewedCount || 0}</p>
             </div>
-            <div className="bg-muted p-4 rounded-lg cursor-pointer hover:bg-muted/80 transition-colors" onClick={loadBookmarks}>
+            <div className="bg-muted p-4 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Bookmarked Articles</p>
               <p className="font-semibold">{bookmarkCount}</p>
             </div>
