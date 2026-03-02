@@ -179,6 +179,11 @@ export function NewsFeed() {
     )
   }
 
+  const handleCategoryChange = (category: string | null) => {
+    setSelectedCategory(category)
+    setError(null)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -191,7 +196,7 @@ export function NewsFeed() {
       </div>
 
       {/* Category Filter */}
-      <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={setSelectedCategory} />
+      <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={handleCategoryChange} />
 
       {/* Search Bar */}
       <div className="flex gap-2">
