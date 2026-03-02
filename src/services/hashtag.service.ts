@@ -1,11 +1,19 @@
 import { logger } from '../utils/logger';
 import { Hashtags, HashtagSchema } from '../types/hashtag';
+import Groq from 'groq-sdk';
+import { config } from '../config';
 
 class HashtagService {
+  private client: Groq;
+
+  constructor() {
+    this.client = new Groq({
+      apiKey: config.groq.apiKey,
+    });
+  }
+
   /**
-   * Generate hashtags from text using keyword extraction
-   * Input: Article title or summary
-   * Output: Array of max 4 hashtags
+   * Generate exactly 4 hashtags using Groq LLM
    */
   async generateHashtags(text: string): Promise<Hashtags> {
     try {
@@ -15,8 +23,25 @@ class HashtagService {
 
       logger.debug(`🏷️ Generating hashtags for: "${text.substring(0, 50)}..."`);
 
-      // Extract hashtags using keyword extraction logic
-      const hashtags = this.extractHashtags(text);
+      const completion = await this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a hashtag generator. Generate exactly 4 relevant hashtags for the given text. Return ONLY the hashtags separated by spaces, no other text. Format: #tag1 #tag2 #tag3 #tag4',
+          },
+          {
+            role: 'user',
+            content: text,
+          },
+        ],
+        model: config.groq.model,
+        temperature: 0.3,
+        max_tokens: 50,
+        top_p: 1,
+      });
+
+      const hashtagsText = completion.choices[0]?.message?.content?.trim() || '';
+      const hashtags = hashtagsText.split(/\s+/).filter(tag => tag.startsWith('#')).slice(0, 4);
 
       // Validate with Zod schema
       const validated = HashtagSchema.parse(hashtags);
@@ -35,46 +60,6 @@ class HashtagService {
   }
 
   /**
-   * Extract hashtags from text using keyword extraction
-   * Identifies important words and converts them to hashtags
-   */
-  private extractHashtags(text: string): string[] {
-    // Common stop words to exclude
-    const stopWords = new Set([
-      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-      'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-      'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-      'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that',
-      'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
-      'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each',
-      'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such',
-      'no', 'nor', 'not', 'only', 'same', 'so', 'than', 'too', 'very',
-      'as', 'if', 'just', 'now', 'has', 'his', 'her', 'their', 'its'
-    ]);
-
-    // Split text into words and clean them
-    const words = text
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '') // Remove punctuation
-      .split(/\s+/)
-      .filter(word => word.length > 3 && !stopWords.has(word));
-
-    // Count word frequency
-    const wordFreq = new Map<string, number>();
-    words.forEach(word => {
-      wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
-    });
-
-    // Sort by frequency and get top words
-    const topWords = Array.from(wordFreq.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([word]) => `#${word}`);
-
-    return topWords.length > 0 ? topWords : ['#news'];
-  }
-
-  /**
    * Batch generate hashtags for multiple texts
    */
   async generateHashtagsBatch(texts: string[]): Promise<Hashtags[]> {
@@ -89,7 +74,7 @@ class HashtagService {
         await this.delay(50);
       } catch (error: any) {
         logger.warn(`Failed to generate hashtags for text: ${error.message}`);
-        results.push([]);
+        results.push(['#news']);
       }
     }
 
