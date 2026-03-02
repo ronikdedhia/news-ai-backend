@@ -5,15 +5,17 @@ import { useAuth, useUser } from '@clerk/nextjs'
 import { useApiClient } from '@/lib/useApiClient'
 import { fetchArticles, Article, syncUser } from '@/lib/api'
 import { NewsCard } from './NewsCard'
+import { CategoryFilter } from './CategoryFilter'
 import { AlertCircle, Lock } from 'lucide-react'
 import { Button } from './ui/button'
 
 export function NewsFeed() {
   const { isSignedIn } = useAuth()
   const { user: clerkUser } = useUser()
-  useApiClient() // Initialize API client with token
+  useApiClient()
   
   const [articles, setArticles] = useState<(Article & { isBookmarked?: boolean })[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offset, setOffset] = useState(0)
@@ -28,7 +30,6 @@ export function NewsFeed() {
   const LIMIT = isSignedIn ? 20 : 10
 
   const loadNews = useCallback(async (newOffset: number = 0) => {
-    // Don't load more if we're at free tier limit and not signed in
     if (!isSignedIn && newOffset >= FREE_TIER_LIMIT) {
       setRequiresAuth(true)
       setHasMore(false)
@@ -56,7 +57,6 @@ export function NewsFeed() {
       
       if (newOffset === 0) {
         setArticles(data.articles)
-        // For free tier, only load up to 10 articles total
         if (!isSignedIn && data.articles.length >= FREE_TIER_LIMIT) {
           setOffset(FREE_TIER_LIMIT)
           setHasMore(false)
@@ -66,7 +66,6 @@ export function NewsFeed() {
           setHasMore(data.count === LIMIT)
         }
       } else {
-        // Check if adding more articles would exceed free tier limit
         const newArticles = [...articles, ...data.articles]
         if (!isSignedIn && newArticles.length >= FREE_TIER_LIMIT) {
           setArticles(newArticles.slice(0, FREE_TIER_LIMIT))
@@ -89,7 +88,6 @@ export function NewsFeed() {
     }
   }, [isSignedIn, articles, LIMIT])
 
-  // Sync user when signed in
   useEffect(() => {
     if (isSignedIn && clerkUser) {
       syncUser({
@@ -98,12 +96,10 @@ export function NewsFeed() {
         lastName: clerkUser.lastName || undefined,
       }).catch(err => console.error('Error syncing user:', err))
     } else if (!isSignedIn) {
-      // Reset tier to free when signed out
       setTier('free')
     }
   }, [isSignedIn, clerkUser])
 
-  // Initial load - only once
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true
@@ -111,12 +107,10 @@ export function NewsFeed() {
     }
   }, [loadNews])
 
-  // Infinite scroll observer - only trigger if not at free tier limit
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore && !loading) {
-          // Don't load if free tier user is at limit
           if (!isSignedIn && offset >= FREE_TIER_LIMIT) {
             setRequiresAuth(true)
             setHasMore(false)
@@ -144,6 +138,13 @@ export function NewsFeed() {
       article.id === articleId ? { ...article, isBookmarked } : article
     ))
   }
+
+  // Filter articles by selected category
+  const filteredArticles = selectedCategory
+    ? selectedCategory === 'others'
+      ? articles.filter(article => !article.category || article.category.trim() === '')
+      : articles.filter(article => article.category?.toLowerCase() === selectedCategory.toLowerCase())
+    : articles
 
   if (loading && articles.length === 0) {
     return (
@@ -189,6 +190,9 @@ export function NewsFeed() {
         </div>
       </div>
 
+      {/* Category Filter */}
+      <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={setSelectedCategory} />
+
       {/* Search Bar */}
       <div className="flex gap-2">
         <input
@@ -206,15 +210,23 @@ export function NewsFeed() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {articles.map((article) => (
-          <NewsCard 
-            key={article.id} 
-            article={article}
-            onBookmarkChange={(isBookmarked) => handleBookmarkChange(article.id, isBookmarked)}
-          />
-        ))}
-      </div>
+      {/* Articles Grid with Animation */}
+      {filteredArticles.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+          {filteredArticles.map((article) => (
+            <div key={article.id} className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <NewsCard 
+                article={article}
+                onBookmarkChange={(isBookmarked) => handleBookmarkChange(article.id, isBookmarked)}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No articles found in {selectedCategory} category</p>
+        </div>
+      )}
 
       {/* Paywall for free users */}
       {requiresAuth && !isSignedIn && (

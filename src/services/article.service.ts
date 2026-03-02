@@ -222,6 +222,28 @@ class ArticleService {
       .offset(offset)
       .orderBy(desc(articles.publishedAt));
   }
+
+  /**
+   * Get articles by category
+   */
+  async getArticlesByCategory(category: string, limit: number = 20, offset: number = 0) {
+    return db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        content: articles.content,
+        hashtags: articles.hashtags,
+        url: articles.url,
+        imageUrl: articles.imageUrl,
+        bookmarkCount: articles.bookmarkCount,
+        category: articles.category,
+      })
+      .from(articles)
+      .where(eq(articles.category, category))
+      .limit(limit)
+      .offset(offset)
+      .orderBy(desc(articles.publishedAt));
+  }
 }
 
 export const articleService = new ArticleService();
