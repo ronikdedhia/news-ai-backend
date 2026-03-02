@@ -24,8 +24,6 @@ export const articles = sqliteTable(
     id: text('id').primaryKey(),
     title: text('title').notNull(),
     content: text('content'),
-    description: text('description'),
-    sourceName: text('source_name'),
     hashtags: text('hashtags'),
     url: text('url').notNull().unique(),
     imageUrl: text('image_url'),

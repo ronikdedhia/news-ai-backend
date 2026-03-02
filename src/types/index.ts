@@ -5,13 +5,13 @@ export const NewsDataArticleSchema = z.object({
   article_id: z.string(),
   title: z.string(),
   link: z.string(),
-  description: z.string().nullable(),
   content: z.string().nullable(),
   pubDate: z.string(),
   image_url: z.string().nullable(),
-  source_name: z.string(),
-  source_url: z.string(),
-  category: z.string().nullable(),
+  category: z.union([z.string(), z.array(z.string())]).nullable().transform((val) => {
+    if (Array.isArray(val)) return val[0] || null;
+    return val;
+  }),
 });
 
 export const NewsDataResponseSchema = z.object({
@@ -28,25 +28,19 @@ export interface Article {
   id: string;
   title: string;
   url: string;
-  description: string | null;
   content: string | null;
   publishedAt: Date;
   imageUrl: string | null;
-  sourceName: string;
-  sourceUrl: string;
   category: string | null;
 }
 
 export interface NewsArticle {
   id: string;
   title: string;
-  description: string | null;
   content: string;
   url: string;
   imageUrl: string;
   publishedAt: string;
-  sourceName: string;
-  sourceUrl: string;
   category: string | null;
 }
 

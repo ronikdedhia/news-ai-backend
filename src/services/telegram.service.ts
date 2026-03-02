@@ -1,4 +1,5 @@
 import axios from 'axios';
+import https from 'https';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
@@ -14,6 +15,9 @@ class TelegramService {
   private readonly sendMessageUrl = `https://api.telegram.org/bot${config.telegram.accessToken}/sendMessage`;
   private readonly sendPhotoUrl = `https://api.telegram.org/bot${config.telegram.accessToken}/sendPhoto`;
   private readonly chatId = config.telegram.channelId;
+  private httpsAgent = new https.Agent({
+    rejectUnauthorized: false,
+  });
 
   /**
    * Send message to Telegram channel
@@ -46,6 +50,7 @@ class TelegramService {
           headers: {
             'Content-Type': 'application/json',
           },
+          httpsAgent: this.httpsAgent,
         }
       );
 
@@ -83,6 +88,7 @@ class TelegramService {
           headers: {
             'Content-Type': 'application/json',
           },
+          httpsAgent: this.httpsAgent,
         }
       );
 

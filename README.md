@@ -1,6 +1,42 @@
 # News AI Backend
 
-A powerful news aggregation and processing pipeline that fetches news articles, summarizes them using AI, generates hashtags, saves to database, and sends to Telegram.
+A powerful full-stack news aggregation platform with AI-powered summarization, bookmarking, user authentication, and real-time updates.
+
+## 🎯 Major Features
+
+### Core News Features
+- 📰 **Multi-Category News Fetching** - Fetches news from 12 categories (education, entertainment, politics, sports, technology, business, health, science, world, nation, lifestyle, opinion)
+- 🤖 **AI Summarization** - Summarizes article titles and content using Groq LLM
+- 🏷️ **Auto Hashtag Generation** - Generates relevant hashtags using Hugging Face
+- 💾 **Smart Database Storage** - Stores articles with duplicate detection and category tracking
+- 📱 **Telegram Integration** - Sends summarized articles to Telegram with images
+- ⏰ **Scheduled Pipeline** - Runs automatically at 12:00 AM and 12:00 PM daily
+- 🧹 **Auto Cleanup** - Removes old articles (30+ days) every 15 days
+
+### User Features
+- 🔐 **Authentication** - Clerk-based user authentication with OAuth
+- 📌 **Bookmarking System** - Save articles for later reading with real-time sync
+- 👤 **User Profiles** - View profile, member since date, articles viewed count
+- 📚 **Bookmarks Management** - View all bookmarked articles in dedicated profile section
+- 🎯 **Category Filtering** - Articles tagged with categories for easy discovery
+- 🔄 **Real-time Tier Updates** - Instant tier change on sign-in/sign-out
+
+### Frontend Features
+- 🌐 **Responsive Design** - Mobile, tablet, and desktop optimized
+- ♾️ **Infinite Scroll** - Lazy loading with smooth pagination
+- 🖼️ **Image Optimization** - Fallback images with graceful degradation
+- 🎨 **Beautiful UI** - Card-based layout with category badges
+- 🔊 **Text-to-Speech** - Listen to articles with browser speech synthesis
+- 🎭 **Dark/Light Mode Ready** - Tailwind CSS with theme support
+- ⚡ **Fast Performance** - Next.js optimization and caching
+
+### API Features
+- 🚀 **Optimized REST API** - Consolidated endpoints with minimal API calls
+- 📊 **Bookmark Status Integration** - Bookmark status included in article responses
+- 🔒 **Authentication Middleware** - Clerk token verification
+- 📈 **Trending Articles** - Articles sorted by bookmark count
+- 🎯 **Free Tier Limits** - 10 articles for free users, unlimited for authenticated
+- 🔄 **Real-time Updates** - Instant bookmark status changes
 
 ## Features
 
@@ -13,6 +49,9 @@ A powerful news aggregation and processing pipeline that fetches news articles, 
 - 🧹 **Auto Cleanup** - Removes old articles (30+ days) every 15 days
 - 🌐 **REST API** - Full API for fetching, trending, and bookmarking articles
 - 🎨 **Beautiful Frontend** - Next.js + shadcn/ui news feed with infinite scroll
+- 🔐 **User Authentication** - Clerk-based auth with OAuth support
+- 📌 **Bookmarking** - Save articles with real-time sync
+- 👤 **User Profiles** - View bookmarks and reading history
 
 ## Tech Stack
 
@@ -134,19 +173,19 @@ Open http://localhost:3000 in your browser.
 
 ## API Endpoints
 
-### News Operations
-- `POST /api/test/fetch-news` - Fetch latest news
-- `POST /api/test/summarize` - Summarize text
-- `POST /api/test/generate-hashtags` - Generate hashtags
-
 ### Article Management
-- `GET /api/articles?limit=10&offset=0` - Get all articles
-- `GET /api/articles/trending?limit=10&offset=0` - Get trending articles
-- `POST /api/articles/:id/bookmark` - Update bookmark count
+- `GET /api/articles?limit=10&offset=0` - Get all articles with bookmark status
+- `GET /api/articles/trending?limit=10&offset=0` - Get trending articles (sorted by bookmarks)
+- `POST /api/articles/:id` - Bookmark/unbookmark article (action: "bookmark" | "unbookmark")
 
-### Pipeline
-- `POST /api/trigger-pipeline` - Manually trigger pipeline
-- `GET /health` - Health check
+### Bookmarks
+- `GET /api/bookmarks?limit=20&offset=0` - Get user's bookmarked articles
+- `POST /api/auth/sync-user` - Sync user from Clerk
+- `GET /api/auth/me` - Get current user info
+- `POST /api/auth/upgrade-premium` - Upgrade to premium
+
+### Health
+- `GET /health` - Health check endpoint
 
 ## Pipeline Flow
 

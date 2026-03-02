@@ -4,8 +4,6 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config'
 import { logger } from './utils/logger';
-import { newsFetcherAgent } from './agents/news-fetcher.agent';
-import { summarizationAgent } from './agents/summarization.agent';
 import { initializeNewsPipeline, triggerNewsPipelineManually } from './cron/news-pipeline.cron';
 import { articleService } from './services/article.service';
 import { userService } from './services/user.service';
@@ -38,129 +36,7 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Test endpoint: Fetch news only
-app.post('/api/test/fetch-news', async (req: Request, res: Response) => {
-  try {
-    logger.info('📡 API: Fetching news articles...');
-
-    const result = await newsFetcherAgent.execute();
-
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        error: result.error,
-      });
-    }
-
-    res.json({
-      success: true,
-      count: result.count,
-      articles: result.articles,
-    });
-  } catch (error: any) {
-    logger.error('API Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Test endpoint: Summarize text
-app.post('/api/test/summarize', async (req: Request, res: Response) => {
-  try {
-    const { text, language = 'english' } = req.body;
-
-    if (!text || typeof text !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Text is required in request body',
-      });
-    }
-
-    logger.info(`📡 API: Generating summary in ${language}...`);
-
-    const { groqService } = await import('./services/groq.service');
-    const summary = await groqService.summarizeText(text, language);
-
-    res.json({
-      success: true,
-      summary,
-    });
-  } catch (error: any) {
-    logger.error('API Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Test endpoint: Generate hashtags
-app.post('/api/test/generate-hashtags', async (req: Request, res: Response) => {
-  try {
-    const { text } = req.body;
-
-    if (!text || typeof text !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Text is required in request body',
-      });
-    }
-
-    logger.info(`📡 API: Generating hashtags...`);
-
-    const { hashtagService } = await import('./services/hashtag.service');
-    const hashtags = await hashtagService.generateHashtags(text);
-
-    res.json({
-      success: true,
-      hashtags,
-    });
-  } catch (error: any) {
-    logger.error('API Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Main endpoint: Fetch + Summarize
-app.post('/api/fetch-and-summarize', async (req: Request, res: Response) => {
-  try {
-    logger.info('📡 API: Starting fetch and summarize pipeline...');
-
-    // Step 1: Fetch news
-    const fetchResult = await newsFetcherAgent.execute();
-
-    if (!fetchResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: fetchResult.error,
-      });
-    }
-
-    // Step 2: Summarize articles
-    const summarizeResult = await summarizationAgent.execute(fetchResult.articles);
-
-    res.json({
-      success: true,
-      articlesFetched: fetchResult.count,
-      articlesSummarized: summarizeResult.articlesProcessed,
-      summaries: summarizeResult.summaries,
-      errors: summarizeResult.errors,
-    });
-  } catch (error: any) {
-    logger.error('API Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Endpoint: Trigger news pipeline manually
+// Main endpoint: Trigger news pipeline manually
 app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
   try {
     logger.info('📡 API: Manual pipeline trigger');

@@ -25,6 +25,13 @@ class ArticleService {
           continue;
         }
 
+        // Skip articles with minimal content (likely paywalled)
+        if (article.content && article.content.length < 10) {
+          logger.debug(`⏭️  Article skipped (minimal content): ${article.title}`);
+          skipped++;
+          continue;
+        }
+
         // Check if article already exists by URL
         const existing = await db
           .select()
@@ -38,17 +45,18 @@ class ArticleService {
           continue;
         }
 
-        // Log the data being inserted for debugging
-        logger.debug(`Inserting article: title=${article.title}, url=${article.url}, publishedAt=${article.publishedAt}`);
+        // Ensure publishedAt is a string in ISO format
+        const publishedAtStr = String(article.publishedAt);
 
         // Insert with explicit column mapping
         const result = await db.insert(articles).values({
           id: article.id,
           title: article.title,
           content: article.content || null,
+          hashtags: article.hashtags || null,
           url: article.url,
           imageUrl: article.imageUrl || null,
-          publishedAt: article.publishedAt,
+          publishedAt: publishedAtStr,
           bookmarkCount: article.bookmarkCount || 0,
           category: article.category || null,
         });
@@ -70,6 +78,12 @@ class ArticleService {
         logger.error(`   Code: ${error.code}`);
         if (error.detail) logger.error(`   Detail: ${error.detail}`);
         if (error.constraint) logger.error(`   Constraint: ${error.constraint}`);
+        
+        // Check if it's a unique constraint violation
+        if (error.message?.includes('UNIQUE constraint failed') || error.message?.includes('unique')) {
+          logger.warn(`   This appears to be a duplicate article (URL already exists)`);
+        }
+        
         logger.error(`   Full error: ${JSON.stringify(error)}`);
       }
     }

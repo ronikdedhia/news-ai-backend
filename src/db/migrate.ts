@@ -41,8 +41,6 @@ async function runMigrations() {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         content TEXT,
-        description TEXT,
-        source_name TEXT,
         hashtags TEXT,
         url TEXT NOT NULL UNIQUE,
         image_url TEXT,

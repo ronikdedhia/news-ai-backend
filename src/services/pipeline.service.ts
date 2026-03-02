@@ -1,67 +1,26 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { articleService } from './article.service';
+import { newsDataService } from './newsdata.service';
 import { groqService } from './groq.service';
 import { hashtagService } from './hashtag.service';
 import { telegramService } from './telegram.service';
 import { NewArticle } from '../db/schema';
-import { Article, FetchNewsResponse, SummarizeResponse } from '../types';
-import { config } from '../config';
+import { Article } from '../types';
 
 class PipelineService {
-  private readonly fetchNewsUrl = `http://localhost:${config.server.port}/api/test/fetch-news`;
-  private readonly summarizeUrl = `http://localhost:${config.server.port}/api/test/summarize`;
-
   /**
-   * Fetch news articles from the news API
+   * Fetch news articles directly from NewsData service
    */
   private async fetchNews(): Promise<Article[]> {
     try {
       logger.info('📡 Fetching news articles...');
-      const response = await axios.post<FetchNewsResponse>(this.fetchNewsUrl);
-
-      if (!response.data.success) {
-        throw new Error('Failed to fetch news');
-      }
-
-      logger.info(`✅ Fetched ${response.data.count} articles`);
-      
-      // Transform NewsArticle to Article format
-      return response.data.articles.map(article => ({
-        id: article.id,
-        title: article.title,
-        url: article.url,
-        description: article.description,
-        content: article.content,
-        publishedAt: new Date(article.publishedAt),
-        imageUrl: article.imageUrl,
-        sourceName: article.sourceName,
-        sourceUrl: article.sourceUrl,
-      }));
+      const articles = await newsDataService.fetchLatestNews(10);
+      logger.info(`✅ Fetched ${articles.length} articles`);
+      return articles;
     } catch (error: any) {
       logger.error(`❌ News fetch failed: ${error.message}`);
       throw error;
-    }
-  }
-
-  /**
-   * Summarize article content
-   */
-  private async summarizeContent(text: string, language: string = 'english'): Promise<string> {
-    try {
-      const response = await axios.post<SummarizeResponse>(this.summarizeUrl, {
-        text,
-        language,
-      });
-
-      if (!response.data.success) {
-        throw new Error('Failed to summarize');
-      }
-
-      return response.data.summary;
-    } catch (error: any) {
-      logger.error(`❌ Summarization failed: ${error.message}`);
-      return '';
     }
   }
 
@@ -71,6 +30,7 @@ class PipelineService {
   async executePipeline(): Promise<{ processed: number; saved: number; errors: number; telegramSent: number }> {
     const startTime = Date.now();
     let processed = 0;
+    let saved = 0;
     let errors = 0;
     let telegramSent = 0;
 
@@ -81,96 +41,73 @@ class PipelineService {
       const fetchedArticles = await this.fetchNews();
       processed = fetchedArticles.length;
 
-      // Step 2: Prepare articles for database
-      const articlesToSave: NewArticle[] = [];
-
+      // Step 2: Process each article
       for (const article of fetchedArticles) {
         try {
-          // Use description if available, otherwise summarize content
-          let summary = article.description || '';
-
-          if (!summary && article.content && article.content !== 'ONLY AVAILABLE IN PAID PLANS') {
-            logger.info(`📝 Summarizing content: ${article.title}`);
-            summary = await this.summarizeContent(article.content);
-            await this.delay(100);
-          }
-
-          // Skip articles with no content available
-          if (!summary || summary === 'ONLY AVAILABLE IN PAID PLANS') {
-            logger.warn(`⏭️ Skipping article (no content available): ${article.title}`);
+          // Check if article already exists
+          const existingArticle = await articleService.getArticleByUrl(article.url);
+          if (existingArticle && existingArticle.length > 0) {
+            logger.debug(`⏭️  Article already exists: ${article.title}`);
             continue;
           }
 
-          // Summarize title to max 5 words
-          let summarizedTitle = article.title;
-          try {
-            logger.info(`📝 Summarizing title: ${article.title}`);
-            summarizedTitle = await groqService.summarizeTitle(article.title);
-            logger.info(`✅ Title summarized: "${article.title}" → "${summarizedTitle}"`);
-            await this.delay(100);
-          } catch (error: any) {
-            logger.warn(`⚠️ Title summarization failed, using original: ${error.message}`);
-            summarizedTitle = article.title;
-          }
+          // Summarize article
+          const summary = await groqService.summarizeText(article.content || '');
 
-          // Generate hashtags from summarized title
-          let hashtags: string[] = [];
-          try {
-            logger.info(`🏷️ Generating hashtags for: "${summarizedTitle}"`);
-            hashtags = await hashtagService.generateHashtags(summarizedTitle);
-            logger.info(`✅ Hashtags generated: ${hashtags.join(', ')}`);
-            await this.delay(100);
-          } catch (error: any) {
-            logger.warn(`⚠️ Hashtag generation failed: ${error.message}`);
-            hashtags = [];
-          }
+          // Generate hashtags
+          const hashtags = await hashtagService.generateHashtags(article.title);
 
-          articlesToSave.push({
-            title: summarizedTitle,
-            content: summary,
-            hashtags,
+          // Save article with summary and hashtags
+          const result = await articleService.saveArticles([{
+            id: article.id,
+            title: article.title,
             url: article.url,
+            content: article.content,
+            publishedAt: article.publishedAt instanceof Date ? article.publishedAt.toISOString() : String(article.publishedAt),
             imageUrl: article.imageUrl,
-            publishedAt: article.publishedAt,
+            category: article.category,
+            hashtags: hashtags.join(','),
             bookmarkCount: 0,
-          });
-        } catch (error: any) {
-          logger.error(`❌ Error processing article: ${error.message}`);
+          }]);
+
+          saved += result.saved;
+          logger.info(`✅ Saved article: ${article.title}`);
+
+          // Send to Telegram if article was saved
+          if (result.savedArticles.length > 0) {
+            try {
+              const savedArticle = result.savedArticles[0];
+              const hashtagsArray = savedArticle.hashtags ? savedArticle.hashtags.split(',') : [];
+              
+              await telegramService.sendMessage({
+                title: article.title,
+                content: savedArticle.content || 'No content available',
+                hashtags: hashtagsArray,
+                url: article.url,
+                imageUrl: savedArticle.imageUrl,
+              });
+              telegramSent++;
+            } catch (telegramError: any) {
+              logger.warn(`⚠️  Failed to send to Telegram: ${telegramError.message}`);
+            }
+          }
+
+          // Rate limiting - wait between articles
+          await this.delay(1000);
+        } catch (articleError: any) {
           errors++;
-        }
-      }
-
-      // Step 3: Save to database and get saved articles directly
-      const result = await articleService.saveArticles(articlesToSave);
-
-      // Step 4: Send saved articles to Telegram
-      if (result.savedArticles.length > 0) {
-        logger.info(`📤 Sending ${result.savedArticles.length} articles to Telegram...`);
-        
-        const telegramMessages = result.savedArticles.map(article => ({
-          title: article.title,
-          content: article.content || 'No content available',
-          hashtags: article.hashtags,
-          url: article.url,
-          imageUrl: article.imageUrl,
-        }));
-
-        const telegramResult = await telegramService.sendMessages(telegramMessages);
-        telegramSent = telegramResult.sent;
-
-        if (telegramResult.failed > 0) {
-          logger.warn(`⚠️ ${telegramResult.failed} Telegram messages failed to send`);
+          logger.error(`❌ Failed to process article: ${articleError.message}`);
         }
       }
 
       const duration = Date.now() - startTime;
 
       logger.info(`✅ Pipeline completed in ${duration}ms`);
-      logger.info(`📊 Summary: ${result.saved} saved, ${result.skipped} skipped, ${errors} errors, ${telegramSent} Telegram messages sent`);
+      logger.info(`📊 Summary: ${saved} saved, ${processed - saved} skipped, ${errors} errors, ${telegramSent} Telegram messages sent`);
 
       return {
         processed,
-        saved: result.saved,
+        saved,
         errors,
         telegramSent,
       };

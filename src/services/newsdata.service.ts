@@ -31,12 +31,12 @@ class NewsDataService {
     try {
       logger.info(`Fetching ${maxArticles} latest news articles from NewsData.io`);
 
-      const response = await this.client.get('/latest', {
+      const response = await this.client.get('/news', {
         params: {
           apikey: config.newsdata.apiKey,
           country: 'in',
           language: 'en',
-          category: 'education,entertainment,politics,sports,technology,business,health,science,world,nation,lifestyle,opinion',
+          category: 'education,entertainment,politics,sports,technology',
           timezone: 'asia/kolkata',
           image: 1,
           removeduplicate: 1,
@@ -54,12 +54,9 @@ class NewsDataService {
         id: item.article_id,
         title: item.title,
         url: item.link,
-        description: item.description,
         content: item.content,
         publishedAt: new Date(item.pubDate),
         imageUrl: item.image_url,
-        sourceName: item.source_name,
-        sourceUrl: item.source_url,
         category: item.category,
       }));
 

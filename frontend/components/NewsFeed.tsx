@@ -97,6 +97,9 @@ export function NewsFeed() {
         firstName: clerkUser.firstName || undefined,
         lastName: clerkUser.lastName || undefined,
       }).catch(err => console.error('Error syncing user:', err))
+    } else if (!isSignedIn) {
+      // Reset tier to free when signed out
+      setTier('free')
     }
   }, [isSignedIn, clerkUser])
 
@@ -218,7 +221,7 @@ export function NewsFeed() {
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         )}
         {!hasMore && articles.length > 0 && !requiresAuth && (
-          <p className="text-muted-foreground">No more articles to load</p>
+          <p className="text-muted-foreground">🎉 You've reached the end of the news universe! </p>
         )}
       </div>
     </div>
