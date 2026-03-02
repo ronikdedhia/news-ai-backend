@@ -9,6 +9,7 @@ import { summarizationAgent } from './agents/summarization.agent';
 import { initializeNewsPipeline, triggerNewsPipelineManually } from './cron/news-pipeline.cron';
 import { articleService } from './services/article.service';
 import { userService } from './services/user.service';
+import { bookmarkService } from './services/bookmark.service';
 import { initializeDatabase } from './db/client';
 import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
 
@@ -178,7 +179,7 @@ app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Get all articles (with free tier limit)
+// Endpoint: Get all articles (with free tier limit) + bookmark status
 app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
@@ -204,13 +205,23 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
       // Premium users: unlimited access
       const articles = await articleService.getArticles(limit, offset);
 
+      // Get bookmark status for all articles in one query
+      const articleIds = articles.map(a => a.id);
+      const bookmarkStatus = await bookmarkService.checkMultipleBookmarks(req.user.id, articleIds);
+
+      // Attach bookmark status to articles
+      const articlesWithBookmarks = articles.map(article => ({
+        ...article,
+        isBookmarked: bookmarkStatus[article.id] || false,
+      }));
+
       // Track article views
       await userService.incrementArticlesViewed(req.user.id);
 
       return res.json({
         success: true,
-        count: articles.length,
-        articles,
+        count: articlesWithBookmarks.length,
+        articles: articlesWithBookmarks,
         tier: 'premium',
       });
     }
@@ -231,10 +242,17 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
     const articlesToFetch = Math.min(limit, remainingArticles);
     
     const articles = await articleService.getArticles(articlesToFetch, offset);
+    
+    // Add isBookmarked: false for unauthenticated users
+    const articlesWithBookmarks = articles.map(article => ({
+      ...article,
+      isBookmarked: false,
+    }));
+
     return res.json({
       success: true,
-      count: articles.length,
-      articles,
+      count: articlesWithBookmarks.length,
+      articles: articlesWithBookmarks,
       tier: 'free',
       totalAvailable: FREE_TIER_LIMIT,
     });
@@ -247,27 +265,43 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Update bookmark count (increment/decrement)
-app.post('/api/articles/:id/bookmark', async (req: Request, res: Response) => {
+// Endpoint: Unified article action (bookmark/unbookmark)
+app.post('/api/articles/:id', verifyClerkToken, async (req: Request, res: Response) => {
   try {
-    const id = req.params.id as string;
-    const { action } = req.body as { action: string };
-
-    if (!action || !['increment', 'decrement'].includes(action)) {
-      return res.status(400).json({
+    if (!req.user) {
+      return res.status(401).json({
         success: false,
-        error: 'Action must be "increment" or "decrement"',
+        error: 'User not authenticated',
       });
     }
 
-    const result = await articleService.updateBookmarkCount(id, action as 'increment' | 'decrement');
+    const articleId = req.params.id as string;
+    const { action } = req.body as { action: 'bookmark' | 'unbookmark' };
 
-    res.json({
-      success: true,
-      articleId: id,
-      bookmarkCount: result.bookmarkCount,
-      action,
-    });
+    if (!action || !['bookmark', 'unbookmark'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Action must be "bookmark" or "unbookmark"',
+      });
+    }
+
+    if (action === 'bookmark') {
+      const result = await bookmarkService.addBookmark(req.user.id, articleId);
+      return res.json({
+        success: true,
+        action: 'bookmark',
+        isBookmarked: true,
+        message: 'Article bookmarked',
+      });
+    } else {
+      await bookmarkService.removeBookmark(req.user.id, articleId);
+      return res.json({
+        success: true,
+        action: 'unbookmark',
+        isBookmarked: false,
+        message: 'Bookmark removed',
+      });
+    }
   } catch (error: any) {
     logger.error('API Error:', error);
     res.status(500).json({
@@ -361,18 +395,69 @@ app.post('/api/auth/upgrade-premium', verifyClerkToken, async (req: Request, res
   }
 });
 
-// Endpoint: Get trending articles (sorted by bookmarks)
-app.get('/api/articles/trending', async (req: Request, res: Response) => {
+// Endpoint: Get trending articles (sorted by bookmarks) + bookmark status
+app.get('/api/articles/trending', optionalAuth, async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = parseInt(req.query.offset as string) || 0;
 
     const trendingArticles = await articleService.getTrendingArticles(limit, offset);
 
+    // Get bookmark status if user is authenticated
+    let articlesWithBookmarks = trendingArticles;
+    if (req.user) {
+      const articleIds = trendingArticles.map(a => a.id);
+      const bookmarkStatus = await bookmarkService.checkMultipleBookmarks(req.user.id, articleIds);
+      articlesWithBookmarks = trendingArticles.map(article => ({
+        ...article,
+        isBookmarked: bookmarkStatus[article.id] || false,
+      }));
+    } else {
+      articlesWithBookmarks = trendingArticles.map(article => ({
+        ...article,
+        isBookmarked: false,
+      }));
+    }
+
     res.json({
       success: true,
-      count: trendingArticles.length,
-      articles: trendingArticles,
+      count: articlesWithBookmarks.length,
+      articles: articlesWithBookmarks,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Get user's bookmarks
+app.get('/api/bookmarks', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not authenticated',
+      });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const bookmarks = await bookmarkService.getUserBookmarks(req.user.id, limit, offset);
+
+    // Add isBookmarked: true for all bookmarks
+    const bookmarksWithStatus = bookmarks.map(bookmark => ({
+      ...bookmark,
+      isBookmarked: true,
+    }));
+
+    res.json({
+      success: true,
+      count: bookmarksWithStatus.length,
+      bookmarks: bookmarksWithStatus,
     });
   } catch (error: any) {
     logger.error('API Error:', error);

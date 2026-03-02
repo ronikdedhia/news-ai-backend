@@ -35,6 +35,23 @@ async function runMigrations() {
     `);
     logger.info('✅ Created users table');
 
+    // Create articles table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS articles (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT,
+        description TEXT,
+        source_name TEXT,
+        hashtags TEXT,
+        url TEXT NOT NULL UNIQUE,
+        image_url TEXT,
+        published_at TEXT NOT NULL,
+        bookmark_count INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    logger.info('✅ Created articles table');
+
     // Create user_bookmarks table
     await client.execute(`
       CREATE TABLE IF NOT EXISTS user_bookmarks (
@@ -42,7 +59,9 @@ async function runMigrations() {
         user_id TEXT NOT NULL,
         article_id TEXT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
+        UNIQUE(user_id, article_id),
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (article_id) REFERENCES articles(id)
       )
     `);
     logger.info('✅ Created user_bookmarks table');
@@ -52,6 +71,16 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
     `);
     logger.info('✅ Created index on users.email');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url)
+    `);
+    logger.info('✅ Created index on articles.url');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)
+    `);
+    logger.info('✅ Created index on articles.published_at');
 
     await client.execute(`
       CREATE INDEX IF NOT EXISTS idx_user_bookmarks_user_id ON user_bookmarks(user_id)

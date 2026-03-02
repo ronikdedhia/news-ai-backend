@@ -112,4 +112,43 @@ export const getCurrentUser = async (): Promise<User> => {
   }
 }
 
+export const addBookmark = async (articleId: string): Promise<{ success: boolean }> => {
+  try {
+    const response = await apiClient.post(`/api/articles/${articleId}`, {
+      action: 'bookmark'
+    })
+    return response.data
+  } catch (error) {
+    console.error('Error adding bookmark:', error)
+    throw error
+  }
+}
+
+export const removeBookmark = async (articleId: string): Promise<{ success: boolean }> => {
+  try {
+    const response = await apiClient.post(`/api/articles/${articleId}`, {
+      action: 'unbookmark'
+    })
+    return response.data
+  } catch (error) {
+    console.error('Error removing bookmark:', error)
+    throw error
+  }
+}
+
+export const getUserBookmarks = async (limit: number = 20, offset: number = 0): Promise<{ bookmarks: Article[], count: number }> => {
+  try {
+    const response = await apiClient.get('/api/bookmarks', {
+      params: { limit, offset }
+    })
+    return {
+      bookmarks: response.data.bookmarks,
+      count: response.data.count
+    }
+  } catch (error) {
+    console.error('Error fetching user bookmarks:', error)
+    throw error
+  }
+}
+
 export default apiClient

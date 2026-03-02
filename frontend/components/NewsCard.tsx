@@ -1,20 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { ExternalLink, Newspaper, Volume2, Square } from 'lucide-react'
+import { useAuth } from '@clerk/nextjs'
+import { ExternalLink, Newspaper, Volume2, Square, Bookmark } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { truncateText } from '@/lib/utils'
-import { Article } from '@/lib/api'
+import { Article, addBookmark, removeBookmark } from '@/lib/api'
 
 interface NewsCardProps {
-  article: Article
+  article: Article & { isBookmarked?: boolean }
+  onBookmarkChange?: (isBookmarked: boolean) => void
 }
 
-export function NewsCard({ article }: NewsCardProps) {
+export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
+  const { isSignedIn } = useAuth()
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isBookmarked, setIsBookmarked] = useState(article.isBookmarked || false)
+  const [isLoadingBookmark, setIsLoadingBookmark] = useState(false)
   const hasImage = article.imageUrl && article.imageUrl.trim() !== ''
+
+  useEffect(() => {
+    setIsBookmarked(article.isBookmarked || false)
+  }, [article.isBookmarked])
 
   const handleTextToSpeech = () => {
     if (isSpeaking) {
@@ -34,6 +43,29 @@ export function NewsCard({ article }: NewsCardProps) {
 
     setIsSpeaking(true)
     window.speechSynthesis.speak(utterance)
+  }
+
+  const handleBookmarkClick = async () => {
+    if (!isSignedIn) {
+      window.location.href = '/sign-in'
+      return
+    }
+
+    setIsLoadingBookmark(true)
+    try {
+      if (isBookmarked) {
+        await removeBookmark(article.id)
+        setIsBookmarked(false)
+      } else {
+        await addBookmark(article.id)
+        setIsBookmarked(true)
+      }
+      onBookmarkChange?.(!isBookmarked)
+    } catch (error) {
+      console.error('Error toggling bookmark:', error)
+    } finally {
+      setIsLoadingBookmark(false)
+    }
   }
 
   return (
@@ -93,6 +125,15 @@ export function NewsCard({ article }: NewsCardProps) {
                 Listen
               </>
             )}
+          </Button>
+          <Button
+            onClick={handleBookmarkClick}
+            disabled={isLoadingBookmark}
+            variant={isBookmarked ? "default" : "outline"}
+            className="flex-1 flex items-center justify-center gap-2"
+          >
+            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+            {isBookmarked ? 'Saved' : 'Save'}
           </Button>
           <Button
             asChild

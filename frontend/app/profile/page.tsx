@@ -3,7 +3,8 @@
 import { useUser } from '@clerk/nextjs'
 import { useEffect, useState } from 'react'
 import { useApiClient } from '@/lib/useApiClient'
-import { getCurrentUser } from '@/lib/api'
+import { getCurrentUser, getUserBookmarks, Article } from '@/lib/api'
+import { NewsCard } from '@/components/NewsCard'
 import { AlertCircle } from 'lucide-react'
 
 interface UserData {
@@ -20,8 +21,12 @@ export default function ProfilePage() {
   const { user: clerkUser, isLoaded } = useUser()
   useApiClient() // Initialize API client with token
   const [userData, setUserData] = useState<UserData | null>(null)
+  const [bookmarks, setBookmarks] = useState<Article[]>([])
+  const [bookmarkCount, setBookmarkCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [bookmarksLoading, setBookmarksLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showBookmarks, setShowBookmarks] = useState(false)
 
   useEffect(() => {
     if (!isLoaded) return
@@ -34,7 +39,15 @@ export default function ProfilePage() {
     const fetchUserData = async () => {
       try {
         const data = await getCurrentUser()
-        setUserData(data as UserData)
+        setUserData({
+          id: data.id,
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          isPremium: data.isPremium ? 1 : 0,
+          articlesViewedCount: data.articlesViewedCount,
+          createdAt: new Date().toISOString(),
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load profile')
       } finally {
@@ -44,6 +57,22 @@ export default function ProfilePage() {
 
     fetchUserData()
   }, [clerkUser, isLoaded])
+
+  const loadBookmarks = async () => {
+    if (bookmarksLoading) return
+    
+    setBookmarksLoading(true)
+    try {
+      const data = await getUserBookmarks(20, 0)
+      setBookmarks(data.bookmarks)
+      setBookmarkCount(data.count)
+      setShowBookmarks(true)
+    } catch (err) {
+      console.error('Error loading bookmarks:', err)
+    } finally {
+      setBookmarksLoading(false)
+    }
+  }
 
   if (!isLoaded || loading) {
     return (
@@ -81,8 +110,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-card border border-border rounded-lg p-8">
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-card border border-border rounded-lg p-8 mb-8">
         <div className="flex items-center gap-6 mb-8">
           {clerkUser.imageUrl && (
             <img
@@ -115,9 +144,9 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground mb-1">Articles Viewed</p>
               <p className="font-semibold">{userData?.articlesViewedCount || 0}</p>
             </div>
-            <div className="bg-muted p-4 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Access Level</p>
-              <p className="font-semibold">✨ Unlimited Access</p>
+            <div className="bg-muted p-4 rounded-lg cursor-pointer hover:bg-muted/80 transition-colors" onClick={loadBookmarks}>
+              <p className="text-sm text-muted-foreground mb-1">Bookmarked Articles</p>
+              <p className="font-semibold">{bookmarkCount}</p>
             </div>
           </div>
 
@@ -132,6 +161,47 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Bookmarks Section */}
+      {showBookmarks && (
+        <div className="bg-card border border-border rounded-lg p-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold">Your Bookmarked Articles</h2>
+            <button
+              onClick={() => setShowBookmarks(false)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          {bookmarksLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+                <p className="text-muted-foreground">Loading bookmarks...</p>
+              </div>
+            </div>
+          ) : bookmarks.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No bookmarked articles yet. Start bookmarking articles from the news feed!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {bookmarks.map((article) => (
+                <NewsCard 
+                  key={article.id} 
+                  article={{ ...article, isBookmarked: true }}
+                  onBookmarkChange={() => {
+                    // Refresh bookmarks when one is removed
+                    loadBookmarks()
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -13,7 +13,7 @@ export function NewsFeed() {
   const { user: clerkUser } = useUser()
   useApiClient() // Initialize API client with token
   
-  const [articles, setArticles] = useState<Article[]>([])
+  const [articles, setArticles] = useState<(Article & { isBookmarked?: boolean })[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offset, setOffset] = useState(0)
@@ -136,6 +136,12 @@ export function NewsFeed() {
     }
   }, [offset, hasMore, isLoadingMore, loading, isSignedIn, loadNews])
 
+  const handleBookmarkChange = (articleId: string, isBookmarked: boolean) => {
+    setArticles(prev => prev.map(article => 
+      article.id === articleId ? { ...article, isBookmarked } : article
+    ))
+  }
+
   if (loading && articles.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -182,7 +188,11 @@ export function NewsFeed() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {articles.map((article) => (
-          <NewsCard key={article.id} article={article} />
+          <NewsCard 
+            key={article.id} 
+            article={article}
+            onBookmarkChange={(isBookmarked) => handleBookmarkChange(article.id, isBookmarked)}
+          />
         ))}
       </div>
 
