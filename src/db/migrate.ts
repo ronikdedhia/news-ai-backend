@@ -40,7 +40,7 @@ async function runMigrations() {
       CREATE TABLE IF NOT EXISTS articles (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        content TEXT,
+        description TEXT,
         hashtags TEXT,
         url TEXT NOT NULL UNIQUE,
         image_url TEXT,

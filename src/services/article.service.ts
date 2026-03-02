@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { articles, NewArticle } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 
 class ArticleService {
@@ -32,6 +32,13 @@ class ArticleService {
           continue;
         }
 
+        // Skip articles with "ONLY AVAILABLE IN PAID PLANS" or similar paywalled messages
+        if (article.content && (article.content.includes('ONLY AVAILABLE') || article.content.includes('paid') || article.content.length < 20)) {
+          logger.debug(`⏭️  Article skipped (paywalled): ${article.title}`);
+          skipped++;
+          continue;
+        }
+
         // Check if article already exists by URL
         const existing = await db
           .select()
@@ -48,11 +55,21 @@ class ArticleService {
         // Ensure publishedAt is a string in ISO format
         const publishedAtStr = String(article.publishedAt);
 
+        // Sanitize text fields - remove problematic Unicode characters
+        const sanitizeText = (text: string | null | undefined): string | null => {
+          if (!text) return null;
+          return text
+            .replace(/[\u2010-\u2015]/g, '-') // Replace various dashes with regular hyphen
+            .replace(/[\u201C\u201D]/g, '"') // Replace smart quotes with regular quotes
+            .replace(/[\u2018\u2019]/g, "'") // Replace smart single quotes
+            .replace(/[\u00A0]/g, ' '); // Replace non-breaking space with regular space
+        };
+
         // Insert with explicit column mapping
         const result = await db.insert(articles).values({
           id: article.id,
-          title: article.title,
-          content: article.content || null,
+          title: sanitizeText(article.title) || article.title,
+          content: sanitizeText(article.content),
           hashtags: article.hashtags || null,
           url: article.url,
           imageUrl: article.imageUrl || null,
@@ -67,7 +84,7 @@ class ArticleService {
         // Add to savedArticles array to avoid additional read
         savedArticles.push({
           title: article.title,
-          content: article.content || null,
+          content: sanitizeText(article.content),
           hashtags: article.hashtags || null,
           url: article.url,
           imageUrl: article.imageUrl || null,
@@ -177,6 +194,33 @@ class ArticleService {
       .limit(limit)
       .offset(offset)
       .orderBy(desc(articles.bookmarkCount));
+  }
+
+  /**
+   * Search articles by title or hashtags
+   */
+  async searchArticles(query: string, limit: number = 20, offset: number = 0) {
+    const searchTerm = `%${query}%`;
+    
+    return db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        content: articles.content,
+        hashtags: articles.hashtags,
+        url: articles.url,
+        imageUrl: articles.imageUrl,
+        bookmarkCount: articles.bookmarkCount,
+        category: articles.category,
+      })
+      .from(articles)
+      .where(
+        // Search in title or hashtags
+        sql`${articles.title} LIKE ${searchTerm} OR ${articles.hashtags} LIKE ${searchTerm}`
+      )
+      .limit(limit)
+      .offset(offset)
+      .orderBy(desc(articles.publishedAt));
   }
 }
 

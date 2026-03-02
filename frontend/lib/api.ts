@@ -6,12 +6,9 @@ export interface Article {
   id: string
   title: string
   url: string
-  description: string
   content: string
   publishedAt: string | Date
   imageUrl: string
-  sourceName: string
-  sourceUrl: string
   category?: string
 }
 
@@ -149,6 +146,25 @@ export const getUserBookmarks = async (limit: number = 20, offset: number = 0): 
     }
   } catch (error) {
     console.error('Error fetching user bookmarks:', error)
+    throw error
+  }
+}
+
+export const searchArticles = async (query: string, limit: number = 20, offset: number = 0): Promise<{ articles: Article[], count: number, query: string }> => {
+  try {
+    const response = await apiClient.get('/api/search', {
+      params: { q: query, limit, offset }
+    })
+    if (response.data.success) {
+      return {
+        articles: response.data.articles,
+        count: response.data.count,
+        query: response.data.query
+      }
+    }
+    throw new Error('Failed to search articles')
+  } catch (error) {
+    console.error('Error searching articles:', error)
     throw error
   }
 }

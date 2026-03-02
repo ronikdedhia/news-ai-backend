@@ -5,7 +5,7 @@ export const NewsDataArticleSchema = z.object({
   article_id: z.string(),
   title: z.string(),
   link: z.string(),
-  content: z.string().nullable(),
+  description: z.string().nullable(),
   pubDate: z.string(),
   image_url: z.string().nullable(),
   category: z.union([z.string(), z.array(z.string())]).nullable().transform((val) => {

@@ -54,7 +54,7 @@ class NewsDataService {
         id: item.article_id,
         title: item.title,
         url: item.link,
-        content: item.content,
+        content: item.description,
         publishedAt: new Date(item.pubDate),
         imageUrl: item.image_url,
         category: item.category,

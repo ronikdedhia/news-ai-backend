@@ -189,6 +189,23 @@ export function NewsFeed() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Search articles by title or hashtags..."
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              const query = (e.target as HTMLInputElement).value
+              if (query.trim()) {
+                window.location.href = `/search?q=${encodeURIComponent(query)}`
+              }
+            }
+          }}
+          className="flex-1 px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {articles.map((article) => (
           <NewsCard 

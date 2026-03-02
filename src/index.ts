@@ -36,6 +36,55 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// Endpoint: Search articles by title or hashtags
+app.get('/api/search', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const query = (req.query.q as string)?.trim();
+
+    if (!query || query.length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: 'Search query must be at least 2 characters',
+      });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Search in title and hashtags
+    const articles = await articleService.searchArticles(query, limit, offset);
+
+    // Get bookmark status if user is authenticated
+    let articlesWithBookmarks = articles;
+    if (req.user) {
+      const articleIds = articles.map(a => a.id);
+      const bookmarkStatus = await bookmarkService.checkMultipleBookmarks(req.user.id, articleIds);
+      articlesWithBookmarks = articles.map(article => ({
+        ...article,
+        isBookmarked: bookmarkStatus[article.id] || false,
+      }));
+    } else {
+      articlesWithBookmarks = articles.map(article => ({
+        ...article,
+        isBookmarked: false,
+      }));
+    }
+
+    res.json({
+      success: true,
+      query,
+      count: articlesWithBookmarks.length,
+      articles: articlesWithBookmarks,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // Main endpoint: Trigger news pipeline manually
 app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
   try {

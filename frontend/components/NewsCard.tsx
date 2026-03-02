@@ -50,7 +50,7 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
       return
     }
 
-    const textToSpeak = `${article.title}. ${article.description || article.content}`
+    const textToSpeak = `${article.title}. ${article.content || ''}`
     const utterance = new SpeechSynthesisUtterance(textToSpeak)
     utterance.rate = 1
     utterance.pitch = 1
@@ -110,9 +110,6 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
         {/* Source Badge and Category */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <Newspaper className="w-4 h-4 text-accent" />
-          <span className="text-xs font-semibold text-accent uppercase tracking-wide">
-            {article.sourceName}
-          </span>
           {article.category && (
             <span className={`text-xs font-semibold px-2 py-1 rounded-full uppercase tracking-wide ${getCategoryColor(article.category)}`}>
               {article.category}
@@ -127,7 +124,7 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
 
         {/* Description */}
         <p className="text-sm text-muted-foreground mb-4 flex-1 whitespace-pre-wrap">
-          {article.description || article.content || 'No description available'}
+          {article.content || 'No content available'}
         </p>
 
         {/* Action Buttons */}

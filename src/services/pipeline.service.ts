@@ -66,7 +66,7 @@ class PipelineService {
             publishedAt: article.publishedAt instanceof Date ? article.publishedAt.toISOString() : String(article.publishedAt),
             imageUrl: article.imageUrl,
             category: article.category,
-            hashtags: hashtags.join(','),
+            hashtags: hashtags.join(' '),
             bookmarkCount: 0,
           }]);
 
@@ -77,7 +77,7 @@ class PipelineService {
           if (result.savedArticles.length > 0) {
             try {
               const savedArticle = result.savedArticles[0];
-              const hashtagsArray = savedArticle.hashtags ? savedArticle.hashtags.split(',') : [];
+              const hashtagsArray = savedArticle.hashtags ? savedArticle.hashtags.split(/\s+/) : [];
               
               await telegramService.sendMessage({
                 title: article.title,
