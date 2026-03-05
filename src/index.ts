@@ -5,11 +5,15 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config'
 import { logger } from './utils/logger';
 import { initializeNewsPipeline, triggerNewsPipelineManually } from './cron/news-pipeline.cron';
+import { initializeNewsletterCron, triggerNewsletterManually } from './cron/newsletter.cron';
 import { articleService } from './services/article.service';
 import { userService } from './services/user.service';
 import { bookmarkService } from './services/bookmark.service';
 import { streakService } from './services/streak.service';
 import { initializeDatabase } from './db/client';
+import { db } from './db/client';
+import { users } from './db/schema';
+import { eq } from 'drizzle-orm';
 import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
 
 const app = express();
@@ -95,6 +99,25 @@ app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: 'Pipeline triggered successfully',
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Endpoint: Trigger newsletter manually (for testing)
+app.post('/api/trigger-newsletter', async (req: Request, res: Response) => {
+  try {
+    logger.info('📡 API: Manual newsletter trigger');
+    await triggerNewsletterManually();
+
+    res.json({
+      success: true,
+      message: 'Newsletter triggered successfully',
     });
   } catch (error: any) {
     logger.error('API Error:', error);
@@ -510,6 +533,56 @@ app.get('/api/auth/preferences', verifyClerkToken, async (req: Request, res: Res
   }
 });
 
+// Endpoint: Public unsubscribe (no auth required)
+app.post('/api/newsletter/unsubscribe', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required',
+      });
+    }
+
+    // Find user by email
+    const userList = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (!userList || userList.length === 0) {
+      // Don't reveal if email exists for security
+      return res.json({
+        success: true,
+        message: 'If this email exists, it has been unsubscribed',
+      });
+    }
+
+    const user = userList[0];
+
+    // Disable notifications for this user
+    const { userPreferencesService } = await import('./services/user-preferences.service');
+    await userPreferencesService.updateUserPreferences(user.id, {
+      notificationsEnabled: false,
+    });
+
+    logger.info(`✅ User unsubscribed: ${email}`);
+
+    res.json({
+      success: true,
+      message: 'You have been unsubscribed from our newsletter',
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // Endpoint: Update user preferences
 app.put('/api/auth/preferences', verifyClerkToken, async (req: Request, res: Response) => {
   try {
@@ -621,5 +694,6 @@ const server = app.listen(PORT, async () => {
   } else {
     // Initialize cron jobs only if database is ready
     initializeNewsPipeline();
+    initializeNewsletterCron();
   }
 });
