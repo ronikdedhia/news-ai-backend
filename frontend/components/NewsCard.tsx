@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@clerk/nextjs'
-import { ExternalLink, Newspaper, Volume2, Square, Bookmark } from 'lucide-react'
+import { ExternalLink, Newspaper, Volume2, Square, Bookmark, Share2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { truncateText } from '@/lib/utils'
 import { Article, addBookmark, removeBookmark } from '@/lib/api'
+import { ShareableImage } from '@/components/ShareableImage'
 
 const getCategoryColor = (category: string): string => {
   const colors: Record<string, string> = {
@@ -139,11 +140,11 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2 w-full">
+        <div className="flex gap-2 w-full flex-wrap">
           <Button
             onClick={handleTextToSpeech}
             variant={isSpeaking ? "destructive" : "outline"}
-            className="flex-1 flex items-center justify-center gap-1 min-w-0 px-2 py-2 text-xs sm:text-sm"
+            className="flex-1 min-w-[80px] flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm"
           >
             {isSpeaking ? (
               <>
@@ -161,15 +162,23 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
             onClick={handleBookmarkClick}
             disabled={isLoadingBookmark}
             variant={isBookmarked ? "default" : "outline"}
-            className="flex-1 flex items-center justify-center gap-1 min-w-0 px-2 py-2 text-xs sm:text-sm"
+            className="flex-1 min-w-[80px] flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm"
           >
             <Bookmark className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${isBookmarked ? 'fill-current' : ''}`} />
             <span className="truncate">{isBookmarked ? 'Saved' : 'Save'}</span>
           </Button>
+          <div className="flex-1 min-w-[80px]">
+            <ShareableImage
+              title={article.title}
+              description={article.content || ''}
+              imageUrl={article.imageUrl || ''}
+              category={article.category || 'News'}
+            />
+          </div>
           <Button
             asChild
             variant="default"
-            className="flex-1 flex items-center justify-center gap-1 min-w-0 px-2 py-2 text-xs sm:text-sm"
+            className="flex-1 min-w-[80px] flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm"
           >
             <a
               href={article.url}
