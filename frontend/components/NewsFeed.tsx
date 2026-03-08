@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth, useUser } from '@clerk/nextjs'
+import Link from 'next/link'
 import { useApiClient } from '@/lib/useApiClient'
 import { fetchArticles, Article, syncUser } from '@/lib/api'
 import { saveArticlesOffline, getOfflineArticles } from '@/lib/offlineStorage'
@@ -98,8 +99,17 @@ export function NewsFeed() {
           setHasMore(data.count === LIMIT)
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[NewsFeed] Network error:', err)
+      
+      // Handle auth errors specifically
+      if (err.response?.status === 401) {
+        console.warn('[NewsFeed] Auth error - token may be expired')
+        setError('Your session has expired. Please sign in again.')
+        setRequiresAuth(true)
+        setHasMore(false)
+        return
+      }
       
       // If offline, try to load from cache
       if (!isOnline) {
@@ -316,9 +326,9 @@ export function NewsFeed() {
             <p className="text-muted-foreground mb-6">
               You've viewed 10 free articles. Sign in to continue reading unlimited news.
             </p>
-            <Button asChild className="w-full">
-              <a href="/sign-in">Sign In to Continue</a>
-            </Button>
+            <Link href="/sign-in" className="inline-block w-full">
+              <Button className="w-full">Sign In to Continue</Button>
+            </Link>
           </div>
         </div>
       )}

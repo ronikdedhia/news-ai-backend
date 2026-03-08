@@ -81,9 +81,9 @@ export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryF
               </p>
 
               <div className="space-y-3">
-                <Button asChild className="w-full">
-                  <a href="/sign-in">Sign In</a>
-                </Button>
+                <a href="/sign-in" className="block">
+                  <Button className="w-full">Sign In</Button>
+                </a>
                 <Button
                   variant="outline"
                   className="w-full"

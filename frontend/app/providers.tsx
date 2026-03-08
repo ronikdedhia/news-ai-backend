@@ -2,12 +2,16 @@
 
 import { ClerkProvider } from '@clerk/nextjs'
 import { ReactNode } from 'react'
-import { PreferencesApplier } from './PreferencesApplier'
+import { SessionRestorer } from './SessionRestorer'
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider>
-      <PreferencesApplier />
+    <ClerkProvider
+      afterSignOutUrl="/"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
+    >
+      <SessionRestorer />
       {children}
     </ClerkProvider>
   )

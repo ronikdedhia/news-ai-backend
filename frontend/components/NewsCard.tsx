@@ -175,21 +175,15 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
               category={article.category || 'News'}
             />
           </div>
-          <Button
-            asChild
-            variant="default"
-            className="flex-1 min-w-[80px] flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm"
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 min-w-[80px] inline-flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
-            <a
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1 min-w-0"
-            >
-              <span className="truncate">Read</span>
-              <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-            </a>
-          </Button>
+            <span className="truncate">Read</span>
+            <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+          </a>
         </div>
       </CardContent>
     </Card>

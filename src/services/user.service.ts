@@ -14,15 +14,15 @@ export class UserService {
     preferences?: UserPreferencesData;
   }): Promise<User> {
     try {
-      // Check if user exists
-      const existingUser = await db
+      // Check if user exists by ID
+      let existingUser = await db
         .select()
         .from(users)
         .where(eq(users.id, userData.id))
         .limit(1);
 
       if (existingUser.length > 0) {
-        // Update existing user
+        // Update existing user (don't change ID due to foreign keys)
         const updated = await db
           .update(users)
           .set({
