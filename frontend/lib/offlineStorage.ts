@@ -13,8 +13,6 @@ export async function saveArticlesOffline(articles: Article[]): Promise<void> {
     
     localStorage.setItem(STORAGE_KEY, JSON.stringify(articlesWithTimestamp))
     localStorage.setItem(TIMESTAMP_KEY, new Date().toISOString())
-    
-    console.log('[Offline] Saved', articles.length, 'articles to localStorage')
   } catch (error) {
     console.error('[Offline] Error saving articles:', error)
   }
@@ -25,7 +23,6 @@ export async function getOfflineArticles(): Promise<Article[]> {
     const cached = localStorage.getItem(STORAGE_KEY)
     if (cached) {
       const articles = JSON.parse(cached)
-      console.log('[Offline] Retrieved', articles.length, 'articles from localStorage')
       return articles.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
     }
     return []
@@ -43,7 +40,6 @@ export async function getOfflineArticlesByCategory(category: string): Promise<Ar
       const filtered = articles.filter(
         (article: any) => article.category?.toLowerCase() === category.toLowerCase()
       )
-      console.log('[Offline] Retrieved', filtered.length, 'articles in category:', category)
       return filtered.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
     }
     return []
@@ -57,7 +53,6 @@ export async function clearOfflineArticles(): Promise<void> {
   try {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(TIMESTAMP_KEY)
-    console.log('[Offline] Cleared cached articles')
   } catch (error) {
     console.error('[Offline] Error clearing articles:', error)
   }

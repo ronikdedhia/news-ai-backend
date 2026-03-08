@@ -35,12 +35,6 @@ export function NewsFeed() {
   const LIMIT = isSignedIn ? 20 : 10
 
   const loadNews = useCallback(async (newOffset: number = 0) => {
-    if (!isSignedIn && newOffset >= FREE_TIER_LIMIT) {
-      setRequiresAuth(true)
-      setHasMore(false)
-      return
-    }
-
     try {
       if (newOffset === 0) {
         setLoading(true)
@@ -62,61 +56,43 @@ export function NewsFeed() {
       
       if (newOffset === 0) {
         setArticles(data.articles)
-        // Save articles offline
         try {
           await saveArticlesOffline(data.articles)
-          console.log('[NewsFeed] Articles saved offline')
         } catch (err) {
           console.error('[NewsFeed] Error saving offline:', err)
         }
         setIsOfflineMode(false)
         
-        if (!isSignedIn && data.articles.length >= FREE_TIER_LIMIT) {
-          setOffset(FREE_TIER_LIMIT)
-          setHasMore(false)
-          setRequiresAuth(true)
-        } else {
-          setOffset(newOffset + LIMIT)
-          setHasMore(data.count === LIMIT)
-        }
+        const shouldHaveMore = data.count === LIMIT;
+        setOffset(newOffset + LIMIT)
+        setHasMore(shouldHaveMore)
       } else {
         const newArticles = [...articles, ...data.articles]
-        if (!isSignedIn && newArticles.length >= FREE_TIER_LIMIT) {
-          setArticles(newArticles.slice(0, FREE_TIER_LIMIT))
-          setOffset(FREE_TIER_LIMIT)
-          setHasMore(false)
-          setRequiresAuth(true)
-        } else {
-          setArticles(newArticles)
-          // Save all articles offline
-          try {
-            await saveArticlesOffline(newArticles)
-            console.log('[NewsFeed] Articles saved offline')
-          } catch (err) {
-            console.error('[NewsFeed] Error saving offline:', err)
-          }
-          setOffset(newOffset + LIMIT)
-          setHasMore(data.count === LIMIT)
+        setArticles(newArticles)
+        
+        try {
+          await saveArticlesOffline(newArticles)
+        } catch (err) {
+          console.error('[NewsFeed] Error saving offline:', err)
         }
+        
+        const shouldHaveMore = data.count === LIMIT;
+        setOffset(newOffset + LIMIT)
+        setHasMore(shouldHaveMore)
       }
     } catch (err: any) {
       console.error('[NewsFeed] Network error:', err)
       
-      // Handle auth errors specifically
       if (err.response?.status === 401) {
-        console.warn('[NewsFeed] Auth error - token may be expired')
         setError('Your session has expired. Please sign in again.')
         setRequiresAuth(true)
         setHasMore(false)
         return
       }
       
-      // If offline, try to load from cache
       if (!isOnline) {
-        console.log('[NewsFeed] Offline detected, loading from cache...')
         try {
           const offlineArticles = await getOfflineArticles()
-          console.log('[NewsFeed] Loaded', offlineArticles.length, 'offline articles')
           if (offlineArticles.length > 0) {
             setArticles(offlineArticles)
             setIsOfflineMode(true)
@@ -137,7 +113,7 @@ export function NewsFeed() {
       setLoading(false)
       setIsLoadingMore(false)
     }
-  }, [isSignedIn, articles, LIMIT, isOnline])
+  }, [articles, LIMIT, isOnline])
 
   useEffect(() => {
     if (isSignedIn && clerkUser) {
@@ -158,10 +134,8 @@ export function NewsFeed() {
       
       // If offline, try to load cached articles first
       if (!isOnline) {
-        console.log('[NewsFeed] App started offline, loading cached articles...')
         getOfflineArticles().then((offlineArticles) => {
           if (offlineArticles.length > 0) {
-            console.log('[NewsFeed] Loaded', offlineArticles.length, 'offline articles')
             setArticles(offlineArticles)
             setIsOfflineMode(true)
             setLoading(false)
@@ -182,11 +156,6 @@ export function NewsFeed() {
     const observer = new IntersectionObserver(
       entries => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore && !loading) {
-          if (!isSignedIn && offset >= FREE_TIER_LIMIT) {
-            setRequiresAuth(true)
-            setHasMore(false)
-            return
-          }
           loadNews(offset)
         }
       },
@@ -202,7 +171,7 @@ export function NewsFeed() {
         observer.unobserve(observerTarget.current)
       }
     }
-  }, [offset, hasMore, isLoadingMore, loading, isSignedIn, loadNews])
+  }, [offset, hasMore, isLoadingMore, loading, loadNews])
 
   const handleBookmarkChange = (articleId: string, isBookmarked: boolean) => {
     setArticles(prev => prev.map(article => 
