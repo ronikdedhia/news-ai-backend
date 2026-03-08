@@ -1,4 +1,4 @@
-# News AI - Daily Newsletter Platform
+# Daily Bytes
 
 A full-stack AI-powered news aggregation platform with daily newsletter delivery, user authentication, bookmarking, and personalized content.
 
@@ -62,6 +62,7 @@ A full-stack AI-powered news aggregation platform with daily newsletter delivery
 - 🎨 **Beautiful UI** - Card-based layout with category badges
 - 🎭 **Dark/Light Mode Ready** - Tailwind CSS with theme support
 - ⚡ **Fast Performance** - Next.js optimization and caching
+- 📸 **Shareable Images** - Generate and share articles as beautiful images on social media (Twitter, Facebook, LinkedIn, WhatsApp, Telegram)
 
 ### API Features
 - 🚀 **Optimized REST API** - Consolidated endpoints with minimal API calls
@@ -122,3 +123,4 @@ A full-stack AI-powered news aggregation platform with daily newsletter delivery
 ✅ Telegram integration
 ✅ SendGrid email delivery
 ✅ Clerk authentication
+✅ Shareable article images for social media

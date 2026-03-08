@@ -88,7 +88,7 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
+    <Card className="overflow-hidden hover:shadow-2xl transition-shadow duration-300 h-full flex flex-col">
       {/* Image Section */}
       <div className="relative w-full h-48 bg-gradient-to-br from-slate-200 to-slate-300 overflow-hidden flex items-center justify-center">
         {hasImage ? (
@@ -140,21 +140,22 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2 w-full flex-wrap">
+        <div className="flex gap-2 w-full">
           <Button
             onClick={handleTextToSpeech}
             variant={isSpeaking ? "destructive" : "outline"}
-            className="flex-1 min-w-[80px] flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm"
+            size="sm"
+            className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs whitespace-nowrap"
           >
             {isSpeaking ? (
               <>
-                <Square className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="truncate">Stop</span>
+                <Square className="w-3 h-3 flex-shrink-0" />
+                <span>Stop</span>
               </>
             ) : (
               <>
-                <Volume2 className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="truncate">Listen</span>
+                <Volume2 className="w-3 h-3 flex-shrink-0" />
+                <span>Listen</span>
               </>
             )}
           </Button>
@@ -162,27 +163,26 @@ export function NewsCard({ article, onBookmarkChange }: NewsCardProps) {
             onClick={handleBookmarkClick}
             disabled={isLoadingBookmark}
             variant={isBookmarked ? "default" : "outline"}
-            className="flex-1 min-w-[80px] flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm"
+            size="sm"
+            className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs whitespace-nowrap"
           >
-            <Bookmark className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${isBookmarked ? 'fill-current' : ''}`} />
-            <span className="truncate">{isBookmarked ? 'Saved' : 'Save'}</span>
+            <Bookmark className={`w-3 h-3 flex-shrink-0 ${isBookmarked ? 'fill-current' : ''}`} />
+            <span>{isBookmarked ? 'Saved' : 'Save'}</span>
           </Button>
-          <div className="flex-1 min-w-[80px]">
-            <ShareableImage
-              title={article.title}
-              description={article.content || ''}
-              imageUrl={article.imageUrl || ''}
-              category={article.category || 'News'}
-            />
-          </div>
+          <ShareableImage
+            title={article.title}
+            description={article.content || ''}
+            imageUrl={article.imageUrl || ''}
+            category={article.category || 'News'}
+          />
           <a
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 min-w-[80px] inline-flex items-center justify-center gap-1 px-2 py-2 text-xs sm:text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors whitespace-nowrap"
           >
-            <span className="truncate">Read</span>
-            <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+            <span>Read</span>
+            <ExternalLink className="w-3 h-3 flex-shrink-0" />
           </a>
         </div>
       </CardContent>

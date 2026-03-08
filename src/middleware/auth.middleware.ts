@@ -46,7 +46,6 @@ export async function verifyClerkToken(req: Request, res: Response, next: NextFu
         lastName: payload.family_name,
       };
 
-      logger.info(`✅ Token verified for user: ${req.user.id}`);
       next();
     } catch (error: any) {
       logger.warn('Token verification failed:', error.message);
@@ -81,7 +80,6 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
             firstName: payload.given_name,
             lastName: payload.family_name,
           };
-          logger.info(`✅ Optional auth verified for user: ${req.user.id}`);
         }
       } catch (error) {
         logger.warn('Optional auth token decode failed, continuing without user');
