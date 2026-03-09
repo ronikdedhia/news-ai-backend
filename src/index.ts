@@ -15,6 +15,7 @@ import { db } from './db/client';
 import { users } from './db/schema';
 import { eq } from 'drizzle-orm';
 import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
+import { alphaVantageService } from './services/alpha-vantage.service';
 
 const app = express();
 
@@ -39,6 +40,35 @@ app.get('/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     environment: config.server.nodeEnv,
   });
+});
+
+// Endpoint: Get stock news from Alpha Vantage
+app.get('/api/stock-news', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const tickers = (req.query.tickers as string)?.split(',').map(t => t.trim().toUpperCase()) || ['AAPL', 'MSFT', 'GOOGL'];
+
+    if (limit < 1 || limit > 50) {
+      return res.status(400).json({
+        success: false,
+        error: 'Limit must be between 1 and 50',
+      });
+    }
+
+    const news = await alphaVantageService.fetchStockNews(tickers, limit);
+
+    res.json({
+      success: true,
+      count: news.length,
+      news,
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 // Endpoint: Search articles by title or hashtags
