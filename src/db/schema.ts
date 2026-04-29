@@ -29,12 +29,21 @@ export const articles = sqliteTable(
     imageUrl: text('image_url'),
     publishedAt: text('published_at').notNull(),
     bookmarkCount: integer('bookmark_count').notNull().default(0),
+    upvoteCount: integer('upvote_count').notNull().default(0),
+    downvoteCount: integer('downvote_count').notNull().default(0),
+    sentiment: text('sentiment'),   // 'positive' | 'neutral' | 'negative'
+    entities: text('entities'),     // JSON: [{name, type}]
     category: text('category'),
+    whyItMatters: text('why_it_matters'),
+    questions: text('questions'),     // JSON: [{q, a}]
+    biasLabel: text('bias_label'),    // 'left' | 'center' | 'right'
+    biasScore: integer('bias_score'), // confidence 0-100
   },
   (table) => ({
     urlIdx: index('articles_url_key').on(table.url),
     publishedAtIdx: index('articles_published_at_key').on(table.publishedAt),
     categoryIdx: index('articles_category_key').on(table.category),
+    sentimentIdx: index('articles_sentiment_key').on(table.sentiment),
   })
 );
 
@@ -44,11 +53,57 @@ export const userBookmarks = sqliteTable(
     id: text('id').primaryKey(),
     userId: text('user_id').notNull(),
     articleId: text('article_id').notNull(),
+    folderId: text('folder_id'),
     createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
   },
   (table) => ({
     userIdIdx: index('user_bookmarks_user_id_key').on(table.userId),
     articleIdIdx: index('user_bookmarks_article_id_key').on(table.articleId),
+  })
+);
+
+export const articleHighlights = sqliteTable(
+  'article_highlights',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    articleId: text('article_id').notNull(),
+    text: text('text').notNull(),
+    color: text('color').notNull().default('yellow'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => ({
+    userIdIdx:    index('article_highlights_user_id_key').on(table.userId),
+    articleIdIdx: index('article_highlights_article_id_key').on(table.articleId),
+  })
+);
+
+export const bookmarkFolders = sqliteTable(
+  'bookmark_folders',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    name: text('name').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('bookmark_folders_user_id_key').on(table.userId),
+  })
+);
+
+export const articleComments = sqliteTable(
+  'article_comments',
+  {
+    id: text('id').primaryKey(),
+    articleId: text('article_id').notNull(),
+    userId: text('user_id').notNull(),
+    body: text('body').notNull(),
+    parentId: text('parent_id'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => ({
+    articleIdIdx: index('article_comments_article_id_key').on(table.articleId),
+    userIdIdx: index('article_comments_user_id_key').on(table.userId),
   })
 );
 
@@ -87,6 +142,73 @@ export const userStreaks = sqliteTable(
   })
 );
 
+export const articleReactions = sqliteTable(
+  'article_reactions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    articleId: text('article_id').notNull(),
+    type: text('type').notNull(), // 'upvote' | 'downvote'
+    createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+  },
+  (table) => ({
+    userArticleIdx: index('article_reactions_user_article_key').on(table.userId, table.articleId),
+  })
+);
+
+export const userAlerts = sqliteTable(
+  'user_alerts',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    keyword: text('keyword').notNull(),
+    isActive: integer('is_active').notNull().default(1),
+    createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+  },
+  (table) => ({
+    userIdIdx: index('user_alerts_user_id_key').on(table.userId),
+  })
+);
+
+export const notifications = sqliteTable(
+  'notifications',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    alertId: text('alert_id').notNull(),
+    articleId: text('article_id').notNull(),
+    articleTitle: text('article_title').notNull(),
+    articleUrl: text('article_url').notNull(),
+    keyword: text('keyword').notNull(),
+    read: integer('read').notNull().default(0),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('notifications_user_id_key').on(table.userId),
+    readIdx: index('notifications_read_key').on(table.read),
+  })
+);
+
+export const pipelineRuns = sqliteTable(
+  'pipeline_runs',
+  {
+    id: text('id').primaryKey(),
+    source: text('source').notNull(), // 'newsdata' | 'alpha_vantage'
+    status: text('status').notNull().default('running'), // 'running' | 'success' | 'failed'
+    processed: integer('processed').notNull().default(0),
+    saved: integer('saved').notNull().default(0),
+    errors: integer('errors').notNull().default(0),
+    telegramSent: integer('telegram_sent').notNull().default(0),
+    startedAt: text('started_at').notNull(),
+    completedAt: text('completed_at'),
+    durationMs: integer('duration_ms'),
+  },
+  (table) => ({
+    sourceIdx: index('pipeline_runs_source_key').on(table.source),
+    startedAtIdx: index('pipeline_runs_started_at_key').on(table.startedAt),
+  })
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Article = typeof articles.$inferSelect;
@@ -97,3 +219,10 @@ export type UserPreference = typeof userPreferences.$inferSelect;
 export type NewUserPreference = typeof userPreferences.$inferInsert;
 export type UserStreak = typeof userStreaks.$inferSelect;
 export type NewUserStreak = typeof userStreaks.$inferInsert;
+export type ArticleReaction = typeof articleReactions.$inferSelect;
+export type UserAlert = typeof userAlerts.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type PipelineRun = typeof pipelineRuns.$inferSelect;
+export type BookmarkFolder = typeof bookmarkFolders.$inferSelect;
+export type ArticleComment = typeof articleComments.$inferSelect;
+export type ArticleHighlight = typeof articleHighlights.$inferSelect;

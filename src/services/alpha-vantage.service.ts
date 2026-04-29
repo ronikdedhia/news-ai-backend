@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
 
 export interface StockNews {
@@ -59,7 +60,7 @@ class AlphaVantageService {
           }
 
           const tickerNews = data.feed.slice(0, limit - allNews.length).map((item: any) => ({
-            id: item.url || '',
+            id: createHash('md5').update(item.url || '').digest('hex'),
             title: item.title || 'Untitled',
             description: item.summary || '',
             image_path: item.banner_image || '',

@@ -157,6 +157,195 @@ async function runMigrations() {
       }
     }
 
+    // Add upvote_count and downvote_count to articles
+    for (const col of ['upvote_count INTEGER NOT NULL DEFAULT 0', 'downvote_count INTEGER NOT NULL DEFAULT 0']) {
+      try {
+        await client.execute(`ALTER TABLE articles ADD COLUMN ${col}`);
+        logger.info(`✅ Added ${col.split(' ')[0]} column to articles`);
+      } catch (e: any) {
+        if (e.message.includes('duplicate column')) {
+          logger.info(`ℹ️  ${col.split(' ')[0]} column already exists`);
+        } else throw e;
+      }
+    }
+
+    // Create article_reactions table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS article_reactions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        article_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, article_id)
+      )
+    `);
+    logger.info('✅ Created article_reactions table');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_article_reactions_user_article ON article_reactions(user_id, article_id)
+    `);
+
+    // Create user_alerts table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS user_alerts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    logger.info('✅ Created user_alerts table');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_user_alerts_user_id ON user_alerts(user_id)
+    `);
+
+    // Add sentiment and entities columns to articles
+    for (const col of ['sentiment TEXT', 'entities TEXT']) {
+      try {
+        await client.execute(`ALTER TABLE articles ADD COLUMN ${col}`);
+        logger.info(`✅ Added ${col.split(' ')[0]} column to articles`);
+      } catch (e: any) {
+        if (e.message.includes('duplicate column')) {
+          logger.info(`ℹ️  ${col.split(' ')[0]} column already exists`);
+        } else throw e;
+      }
+    }
+
+    // Create pipeline_runs table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS pipeline_runs (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        processed INTEGER NOT NULL DEFAULT 0,
+        saved INTEGER NOT NULL DEFAULT 0,
+        errors INTEGER NOT NULL DEFAULT 0,
+        telegram_sent INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        duration_ms INTEGER
+      )
+    `);
+    logger.info('✅ Created pipeline_runs table');
+
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_pipeline_runs_source ON pipeline_runs(source)
+    `);
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started_at ON pipeline_runs(started_at)
+    `);
+
+    // Create notifications table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        alert_id TEXT NOT NULL,
+        article_id TEXT NOT NULL,
+        article_title TEXT NOT NULL,
+        article_url TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    `);
+    logger.info('✅ Created notifications table');
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)
+    `);
+
+    // Add folder_id column to user_bookmarks
+    try {
+      await client.execute(`ALTER TABLE user_bookmarks ADD COLUMN folder_id TEXT`);
+      logger.info('✅ Added folder_id column to user_bookmarks');
+    } catch (e: any) {
+      if (e.message.includes('duplicate column')) {
+        logger.info('ℹ️  folder_id column already exists');
+      } else throw e;
+    }
+
+    // Create bookmark_folders table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS bookmark_folders (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+    logger.info('✅ Created bookmark_folders table');
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_bookmark_folders_user_id ON bookmark_folders(user_id)
+    `);
+
+    // Add why_it_matters column to articles
+    try {
+      await client.execute(`ALTER TABLE articles ADD COLUMN why_it_matters TEXT`);
+      logger.info('✅ Added why_it_matters column to articles');
+    } catch (e: any) {
+      if (e.message.includes('duplicate column')) {
+        logger.info('ℹ️  why_it_matters column already exists');
+      } else throw e;
+    }
+
+    // Create article_highlights table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS article_highlights (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        article_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT 'yellow',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (article_id) REFERENCES articles(id)
+      )
+    `);
+    logger.info('✅ Created article_highlights table');
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_article_highlights_user_id ON article_highlights(user_id)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_article_highlights_article_id ON article_highlights(article_id)`);
+
+    // Create article_comments table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS article_comments (
+        id TEXT PRIMARY KEY,
+        article_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        body TEXT NOT NULL,
+        parent_id TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (article_id) REFERENCES articles(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+    logger.info('✅ Created article_comments table');
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_article_comments_article_id ON article_comments(article_id)
+    `);
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_article_comments_user_id ON article_comments(user_id)
+    `);
+
+    // Add questions, bias_label, bias_score columns to articles
+    for (const colDef of [
+      'questions TEXT',
+      'bias_label TEXT',
+      'bias_score INTEGER',
+    ]) {
+      try {
+        await client.execute(`ALTER TABLE articles ADD COLUMN ${colDef}`);
+        logger.info(`✅ Added ${colDef.split(' ')[0]} column to articles`);
+      } catch (e: any) {
+        if (e.message.includes('duplicate column')) {
+          logger.info(`ℹ️  ${colDef.split(' ')[0]} column already exists`);
+        } else throw e;
+      }
+    }
+
     logger.info('✅ All migrations completed successfully!');
     process.exit(0);
   } catch (error: any) {

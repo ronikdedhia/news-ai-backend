@@ -29,7 +29,7 @@ class GroqService {
 
       const systemPrompt = languagePrompts[language] || languagePrompts.english;
 
-      const completion = await this.client.chat.completions.create({
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
         messages: [
           {
             role: 'system',
@@ -44,7 +44,7 @@ class GroqService {
         temperature: 0.1,
         max_tokens: 100,
         top_p: 1,
-      });
+      }));
 
       const summary = completion.choices[0]?.message?.content?.trim() || '';
       
@@ -77,7 +77,7 @@ class GroqService {
 
       const systemPrompt = languagePrompts[language] || languagePrompts.english;
 
-      const completion = await this.client.chat.completions.create({
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
         messages: [
           {
             role: 'system',
@@ -92,7 +92,7 @@ class GroqService {
         temperature: 0,
         max_tokens: 15,
         top_p: 1,
-      });
+      }));
 
       const title = completion.choices[0]?.message?.content?.trim() || '';
       
@@ -105,6 +105,98 @@ class GroqService {
         throw new Error(`Title does not meet constraints: ${error.errors[0]?.message}`);
       }
       throw new Error(`Failed to generate title: ${error.message}`);
+    }
+  }
+
+  async generateWhyItMatters(title: string, content: string): Promise<string> {
+    try {
+      const text = `${title}. ${content}`.slice(0, 600);
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a news analyst. In ONE sentence of at most 20 words, explain the real-world significance of this news. Start with the impact, not the event. No quotes, no preamble, no period at the end.',
+          },
+          { role: 'user', content: text },
+        ],
+        model: config.groq.model,
+        temperature: 0.2,
+        max_tokens: 40,
+      }));
+      return completion.choices[0]?.message?.content?.trim().replace(/\.$/, '') || '';
+    } catch (error: any) {
+      logger.warn(`generateWhyItMatters failed: ${error.message}`);
+      return '';
+    }
+  }
+
+  async generateQuestions(title: string, content: string): Promise<Array<{ q: string; a: string }>> {
+    try {
+      const text = `${title}. ${content}`.slice(0, 700);
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a news analyst. Given a news article, return ONLY valid JSON — no explanation, no markdown.
+Generate exactly 2 insightful Socratic questions a thoughtful reader would ask, each with a concise 1-sentence answer.
+Format: [{"q":"...","a":"..."},{"q":"...","a":"..."}]
+Rules:
+- Questions must be specific to THIS article (Why did X happen? Who benefits? What comes next?)
+- Answers max 20 words, factual, based only on the article
+- Do NOT use generic questions like "What is the main topic?"`,
+          },
+          { role: 'user', content: text },
+        ],
+        model: config.groq.model,
+        temperature: 0.2,
+        max_tokens: 200,
+      }));
+      const raw = completion.choices[0]?.message?.content?.trim() || '[]';
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (!match) return [];
+      const parsed = JSON.parse(match[0]);
+      return Array.isArray(parsed)
+        ? parsed.filter((x: any) => typeof x?.q === 'string' && typeof x?.a === 'string').slice(0, 2)
+        : [];
+    } catch (error: any) {
+      logger.warn(`generateQuestions failed: ${error.message}`);
+      return [];
+    }
+  }
+
+  async detectBias(title: string, content: string): Promise<{ label: string; score: number }> {
+    try {
+      const text = `${title}. ${content}`.slice(0, 700);
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a media bias analyst. Return ONLY valid JSON, no explanation.
+Analyze the news text for political framing bias. Return:
+{"label":"left"|"center"|"right","score":0-100}
+Rules:
+- label: overall political lean of the framing (not the topic itself)
+- score: your confidence in this assessment (0=uncertain, 100=very confident)
+- Use "center" when framing is neutral or balanced
+- Base only on language, framing, and emphasis — not the topic`,
+          },
+          { role: 'user', content: text },
+        ],
+        model: config.groq.model,
+        temperature: 0,
+        max_tokens: 40,
+      }));
+      const raw = completion.choices[0]?.message?.content?.trim() || '{}';
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) return { label: 'center', score: 50 };
+      const parsed = JSON.parse(match[0]);
+      return {
+        label: ['left', 'center', 'right'].includes(parsed.label) ? parsed.label : 'center',
+        score: typeof parsed.score === 'number' ? Math.min(100, Math.max(0, parsed.score)) : 50,
+      };
+    } catch (error: any) {
+      logger.warn(`detectBias failed: ${error.message}`);
+      return { label: 'center', score: 50 };
     }
   }
 
@@ -127,8 +219,72 @@ class GroqService {
     return summaries;
   }
 
+  async analyzeArticle(title: string, content: string): Promise<{
+    sentiment: 'positive' | 'neutral' | 'negative';
+    entities: Array<{ name: string; type: 'person' | 'company' | 'place' }>;
+  }> {
+    try {
+      const text = `${title}. ${content}`.slice(0, 800);
+
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a news analyst. Return ONLY valid JSON, no explanation, no markdown.
+Analyze the news text and return:
+{"sentiment":"positive"|"neutral"|"negative","entities":[{"name":"..","type":"person"|"company"|"place"}]}
+Rules:
+- sentiment: overall tone of the news
+- entities: max 5, only clearly mentioned real-world names
+- type "person" for people, "company" for organizations/brands, "place" for locations
+- if no entities found, return empty array`,
+          },
+          { role: 'user', content: text },
+        ],
+        model: config.groq.model,
+        temperature: 0,
+        max_tokens: 150,
+      }));
+
+      const raw = completion.choices[0]?.message?.content?.trim() || '{}';
+      // Extract JSON object — handles preamble text and markdown fences
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('No JSON object found in response');
+      const parsed = JSON.parse(match[0]);
+
+      return {
+        sentiment: ['positive', 'neutral', 'negative'].includes(parsed.sentiment)
+          ? parsed.sentiment
+          : 'neutral',
+        entities: Array.isArray(parsed.entities)
+          ? parsed.entities
+              .filter((e: any) => e?.name && ['person', 'company', 'place'].includes(e?.type))
+              .slice(0, 5)
+          : [],
+      };
+    } catch (error: any) {
+      logger.warn(`analyzeArticle failed, using defaults: ${error.message}`);
+      return { sentiment: 'neutral', entities: [] };
+    }
+  }
+
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async callWithRetry<T>(fn: () => Promise<T>, retries = 4, baseDelay = 2000): Promise<T> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        const is429 = error.status === 429 || error.message?.includes('429') || error.message?.includes('rate_limit_exceeded');
+        if (!is429 || attempt === retries) throw error;
+        const wait = baseDelay * Math.pow(2, attempt);
+        logger.warn(`Groq rate limit hit, retrying in ${wait}ms (attempt ${attempt + 1}/${retries})`);
+        await this.delay(wait);
+      }
+    }
+    throw new Error('Unreachable');
   }
 }
 

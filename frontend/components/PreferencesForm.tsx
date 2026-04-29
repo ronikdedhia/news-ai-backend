@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { createUserPreferences } from '@/lib/api'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 
-const CATEGORIES = ['education', 'entertainment', 'politics', 'sports', 'technology']
+import { CATEGORIES } from '@/lib/categories'
+
 const LANGUAGES = [
   { value: 'english', label: 'English' },
   { value: 'hindi', label: 'हिंदी (Hindi)' },

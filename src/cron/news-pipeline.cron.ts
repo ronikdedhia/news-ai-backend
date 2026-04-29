@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import { logger } from '../utils/logger';
 import { pipelineService } from '../services/pipeline.service';
 import { cleanupService } from '../services/cleanup.service';
+import { alertService } from '../services/alert.service';
+import { metricsService } from '../services/metrics.service';
 
 let lastCleanupDateNewsData: Date | null = null;
 let lastCleanupDateAlphaVantage: Date | null = null;
@@ -104,17 +106,22 @@ export function initializeNewsPipeline() {
  * Execute NewsData pipeline
  */
 async function executeNewsDataJob() {
-  const jobStartTime = new Date().toISOString();
+  const startTs = Date.now();
+  const runId = await metricsService.recordRunStart('newsdata').catch(() => '');
 
   try {
-    logger.info(`🔄 NewsData pipeline job started at ${jobStartTime}`);
+    logger.info('🔄 NewsData pipeline job started');
 
     const result = await pipelineService.executeNewsDataPipeline();
 
     logger.info(`✅ NewsData pipeline job completed`);
     logger.info(`📈 Results: ${result.processed} processed, ${result.saved} saved, ${result.telegramSent} Telegram sent, ${result.errors} errors`);
+
+    if (runId) await metricsService.recordRunComplete(runId, result, startTs).catch(() => {});
+    await alertService.checkRecentArticles();
   } catch (error: any) {
     logger.error(`❌ NewsData pipeline job failed: ${error.message}`);
+    if (runId) await metricsService.recordRunFailed(runId, startTs).catch(() => {});
   }
 }
 
@@ -122,17 +129,21 @@ async function executeNewsDataJob() {
  * Execute Alpha Vantage pipeline
  */
 async function executeAlphaVantageJob() {
-  const jobStartTime = new Date().toISOString();
+  const startTs = Date.now();
+  const runId = await metricsService.recordRunStart('alpha_vantage').catch(() => '');
 
   try {
-    logger.info(`🔄 Alpha Vantage pipeline job started at ${jobStartTime}`);
+    logger.info('🔄 Alpha Vantage pipeline job started');
 
     const result = await pipelineService.executeAlphaVantagePipeline();
 
     logger.info(`✅ Alpha Vantage pipeline job completed`);
     logger.info(`📈 Results: ${result.processed} processed, ${result.saved} saved, ${result.telegramSent} Telegram sent, ${result.errors} errors`);
+
+    if (runId) await metricsService.recordRunComplete(runId, result, startTs).catch(() => {});
   } catch (error: any) {
     logger.error(`❌ Alpha Vantage pipeline job failed: ${error.message}`);
+    if (runId) await metricsService.recordRunFailed(runId, startTs).catch(() => {});
   }
 }
 

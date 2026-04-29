@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { userBookmarks, articles } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -115,10 +115,20 @@ class BookmarkService {
   }
 
   /**
-   * Get all bookmarks for a user
+   * Get all bookmarks for a user, optionally filtered by folder.
+   * Pass folderId='none' to get unsorted bookmarks (folderId IS NULL).
    */
-  async getUserBookmarks(userId: string, limit: number = 20, offset: number = 0) {
+  async getUserBookmarks(userId: string, limit: number = 20, offset: number = 0, folderId?: string) {
     try {
+      let whereClause;
+      if (folderId === 'none') {
+        whereClause = and(eq(userBookmarks.userId, userId), isNull(userBookmarks.folderId));
+      } else if (folderId) {
+        whereClause = and(eq(userBookmarks.userId, userId), eq(userBookmarks.folderId, folderId));
+      } else {
+        whereClause = eq(userBookmarks.userId, userId);
+      }
+
       const bookmarks = await db
         .select({
           id: articles.id,
@@ -130,10 +140,11 @@ class BookmarkService {
           bookmarkCount: articles.bookmarkCount,
           category: articles.category,
           bookmarkedAt: userBookmarks.createdAt,
+          bookmarkFolderId: userBookmarks.folderId,
         })
         .from(userBookmarks)
         .innerJoin(articles, eq(userBookmarks.articleId, articles.id))
-        .where(eq(userBookmarks.userId, userId))
+        .where(whereClause)
         .limit(limit)
         .offset(offset)
         .orderBy(userBookmarks.createdAt);

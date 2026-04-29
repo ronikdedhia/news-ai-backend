@@ -4,118 +4,95 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.6%;
+    --background: 240 20% 98%;
+    --foreground: 224 71% 4%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.6%;
+    --card-foreground: 224 71% 4%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.6%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 84.2% 60.2%;
+    --popover-foreground: 224 71% 4%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 262 83% 58%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --primary: 0 0% 9%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --primary: 243 75% 59%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --ring: 0 0% 3.6%;
-    --radius: 0.5rem;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --ring: 243 75% 59%;
+    --radius: 1rem;
     --font-size-multiplier: 1;
   }
 
   .dark {
-    --background: 0 0% 3.6%;
-    --foreground: 0 0% 98.2%;
-    --card: 0 0% 3.6%;
-    --card-foreground: 0 0% 98.2%;
-    --popover: 0 0% 3.6%;
-    --popover-foreground: 0 0% 98.2%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 84.2% 60.2%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 9%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --primary: 0 0% 98.2%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98.2%;
-    --ring: 0 84.2% 60.2%;
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 222 47% 8%;
+    --card-foreground: 213 31% 91%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 213 31% 91%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215 16% 57%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --primary: 243 75% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 47% 11%;
+    --secondary-foreground: 210 40% 98%;
+    --ring: 243 75% 65%;
   }
 
-  /* Font size multipliers */
-  html[data-font-size="small"] {
-    --font-size-multiplier: 0.875;
-  }
-
-  html[data-font-size="medium"] {
-    --font-size-multiplier: 1;
-  }
-
-  html[data-font-size="large"] {
-    --font-size-multiplier: 1.125;
-  }
+  html[data-font-size="small"]  { --font-size-multiplier: 0.875; }
+  html[data-font-size="medium"] { --font-size-multiplier: 1; }
+  html[data-font-size="large"]  { --font-size-multiplier: 1.125; }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
 
-  /* Apply font size multiplier to text elements */
-  p {
-    font-size: calc(1rem * var(--font-size-multiplier));
-  }
+  p      { font-size: calc(1rem    * var(--font-size-multiplier)); }
+  h1     { font-size: calc(2.25rem * var(--font-size-multiplier)); }
+  h2     { font-size: calc(1.875rem* var(--font-size-multiplier)); }
+  h3     { font-size: calc(1.5rem  * var(--font-size-multiplier)); }
+  h4     { font-size: calc(1.25rem * var(--font-size-multiplier)); }
+  h5     { font-size: calc(1.125rem* var(--font-size-multiplier)); }
+  h6     { font-size: calc(1rem    * var(--font-size-multiplier)); }
+  span   { font-size: calc(1rem    * var(--font-size-multiplier)); }
+  a      { font-size: calc(1rem    * var(--font-size-multiplier)); }
+  button { font-size: calc(1rem    * var(--font-size-multiplier)); }
+  input, textarea, select { font-size: calc(1rem * var(--font-size-multiplier)); }
+}
 
-  h1 {
-    font-size: calc(2.25rem * var(--font-size-multiplier));
+@layer utilities {
+  .glass {
+    @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/40 dark:border-white/10;
   }
-
-  h2 {
-    font-size: calc(1.875rem * var(--font-size-multiplier));
+  .glass-strong {
+    @apply bg-white/85 dark:bg-slate-950/85 backdrop-blur-2xl border border-white/50 dark:border-white/[0.08];
   }
-
-  h3 {
-    font-size: calc(1.5rem * var(--font-size-multiplier));
-  }
-
-  h4 {
-    font-size: calc(1.25rem * var(--font-size-multiplier));
-  }
-
-  h5 {
-    font-size: calc(1.125rem * var(--font-size-multiplier));
-  }
-
-  h6 {
-    font-size: calc(1rem * var(--font-size-multiplier));
-  }
-
-  span {
-    font-size: calc(1rem * var(--font-size-multiplier));
-  }
-
-  a {
-    font-size: calc(1rem * var(--font-size-multiplier));
-  }
-
-  button {
-    font-size: calc(1rem * var(--font-size-multiplier));
-  }
-
-  input,
-  textarea,
-  select {
-    font-size: calc(1rem * var(--font-size-multiplier));
+  .glass-card {
+    @apply bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/50 dark:border-white/[0.07] shadow-xl;
   }
 }
 
+/* Blob pulse animation */
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -20px) scale(1.05); }
+  66%       { transform: translate(-20px, 10px) scale(0.97); }
+}
+
+.blob {
+  animation: blob-drift 12s ease-in-out infinite;
+}
+.blob-delay-2 { animation-delay: 2s; }
+.blob-delay-4 { animation-delay: 4s; }
+.blob-delay-6 { animation-delay: 6s; }

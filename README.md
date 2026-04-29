@@ -1,126 +1,256 @@
 # Daily Bytes
 
-A full-stack AI-powered news aggregation platform with daily newsletter delivery, user authentication, bookmarking, and personalized content.
+A full-stack AI-powered news aggregation and intelligence platform. Fetches news from multiple sources, runs it through an AI pipeline (summarization, sentiment analysis, named entity recognition, contextual insight generation), and delivers personalized content via a modern web app and daily email digest.
 
-## 🎯 Major Features
-
-### AI-Powered Summarization
-- 🤖 **Dual Summarization** - Generates both title summaries (3-5 words) and content summaries (50-70 words) using Groq LLM
-- 🌍 **Multi-Language Support** - Summarizes in English, Hindi, Marathi, Gujarati, Tamil, Spanish, French, and German
-- ⚡ **Batch Processing** - Efficiently processes multiple articles with rate limiting
-- 📊 **Schema Validation** - Ensures summaries meet strict word count and quality constraints
-- 🎯 **Context-Aware** - Extracts only main facts without inferences or elaborations
-
-### Text-to-Speech (TTS)
-- 🔊 **Browser-Based TTS** - Listen to articles using native Web Speech API
-- ⏸️ **Play/Stop Controls** - Start and stop audio playback with single click
-- 🎙️ **Full Article Audio** - Reads both title and complete article content
-- 📱 **Mobile Friendly** - Works seamlessly on all devices
-- ⚙️ **Customizable** - Adjustable speech rate, pitch, and volume
-
-### Reading Streak System
-- 🔥 **Daily Streak Tracking** - Tracks consecutive days of article reading
-- 🏆 **Longest Streak** - Records personal best reading streak
-- 🎖️ **Achievement Badges** - Unlocks badges at 7-day and 30-day milestones
-- 📈 **Streak Persistence** - Maintains streak across sessions
-- 🔄 **Smart Reset** - Automatically resets streak if gap exceeds 1 day
-
-### News & Content
-- 📰 **Multi-Category News Fetching** - Fetches news from 12 categories (education, entertainment, politics, sports, technology, business, health, science, world, nation, lifestyle, opinion)
-- 🏷️ **Auto Hashtag Generation** - Generates relevant hashtags using Hugging Face
-- 💾 **Smart Database Storage** - Stores articles with duplicate detection and category tracking
-- ⏰ **Scheduled Pipeline** - Runs automatically at 12:00 AM and 12:00 PM daily
-- 🧹 **Auto Cleanup** - Removes old articles (30+ days) every 15 days
-
-### Daily Newsletter System
-- 📧 **Automated Daily Newsletter** - Sends personalized newsletters via SendGrid at configured time (default: 8:00 AM)
-- 🎯 **Personalized Content** - Articles curated based on user's preferred categories
-- 🎨 **Beautiful Email Templates** - Professional HTML emails with images, summaries, and direct links
-- 📊 **Full Article Content** - Complete article text included (no truncation)
-- 🏷️ **Category Tags** - Articles tagged with sentence-case category names
-- 📱 **Responsive Design** - Mobile-friendly email layout
-
-### User Features
-- 🔐 **Authentication** - Clerk-based user authentication with OAuth
-- 📌 **Bookmarking System** - Save articles for later reading with real-time sync
-- 👤 **User Profiles** - View profile, member since date, articles viewed count
-- 📚 **Bookmarks Management** - View all bookmarked articles in dedicated profile section
-- 🎯 **Category Preferences** - Select preferred news categories
-- 🔄 **Real-time Tier Updates** - Instant tier change on sign-in/sign-out
-
-### Newsletter Management
-- 🔔 **Notification Preferences** - Enable/disable newsletter emails
-- 📅 **Frequency Control** - Choose daily, weekly, or never
-- 🚫 **Easy Unsubscribe** - One-click unsubscribe from email links
-- ⚙️ **Preference Management** - Manage newsletter settings without authentication
-- 📧 **Public Unsubscribe Endpoint** - Unsubscribe directly from email (no login required)
-
-### Frontend Features
-- 🌐 **Responsive Design** - Mobile, tablet, and desktop optimized
-- ♾️ **Infinite Scroll** - Lazy loading with smooth pagination
-- 🖼️ **Image Optimization** - Fallback images with graceful degradation
-- 🎨 **Beautiful UI** - Card-based layout with category badges
-- 🎭 **Dark/Light Mode Ready** - Tailwind CSS with theme support
-- ⚡ **Fast Performance** - Next.js optimization and caching
-- 📸 **Shareable Images** - Generate and share articles as beautiful images on social media (Twitter, Facebook, LinkedIn, WhatsApp, Telegram)
-
-### API Features
-- 🚀 **Optimized REST API** - Consolidated endpoints with minimal API calls
-- 📊 **Bookmark Status Integration** - Bookmark status included in article responses
-- 🔒 **Authentication Middleware** - Clerk token verification
-- 📈 **Trending Articles** - Articles sorted by bookmark count
-- 🎯 **Free Tier Limits** - 10 articles for free users, unlimited for authenticated
-- 📧 **Newsletter Endpoints** - Manual trigger and public unsubscribe
-
-### Integrations
-- 📱 **Telegram Integration** - Sends summarized articles to Telegram with images
-- 📧 **SendGrid Email** - Professional email delivery with tracking
-- 🔐 **Clerk Authentication** - OAuth and email-based authentication
+---
 
 ## Tech Stack
 
-**Backend:**
-- Node.js + TypeScript
-- Express.js
-- Drizzle ORM
-- Turso (SQLite)
-- Groq API (LLM)
-- Hugging Face API
-- SendGrid API
-- Telegram Bot API
-- node-cron
+**Backend:** Node.js · TypeScript · Express.js · Drizzle ORM · Turso (libSQL/SQLite) · Groq LLM · Hugging Face · SendGrid · Telegram Bot API · node-cron
 
-**Frontend:**
-- Next.js 14
-- React 18
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Lucide Icons
+**Frontend:** Next.js 14 · React 18 · TypeScript · Tailwind CSS · shadcn/ui · Lucide Icons · Clerk Auth
 
+---
+
+## Features
+
+### AI Pipeline
+- **Dual Summarization** — Generates a 3-5 word title summary and a 50-70 word content summary per article using Groq LLM
+- **Multi-language Summarization** — English, Hindi, Marathi, Gujarati, Tamil, Spanish, French, German
+- **Sentiment Analysis** — Classifies each article as `positive`, `neutral`, or `negative` using a structured Groq prompt
+- **Named Entity Recognition (NER)** — Extracts up to 5 named entities (people, companies, places) per article via a single combined Groq call (sentiment + NER in one request — efficient and demonstrates structured LLM output)
+- **Why It Matters** — Groq-generated one-sentence real-world significance blurb per article, stored in `articles.why_it_matters`, generated at pipeline time alongside NER and available on-demand for older articles
+- **AI Contextual Questions** — Two Socratic Q&A pairs per article ("Why did this happen?" / "Who benefits?"), generated by Groq at pipeline time, stored as `articles.questions` JSON, available on-demand via endpoint for older articles
+- **Bias Detection** — Groq prompt scores each article's framing as `left` / `center` / `right` with a confidence score (0–100); stored as `articles.bias_label` + `articles.bias_score`; displayed as a subtle chip on the card
+- **Auto Hashtag Generation** — Generates relevant hashtags using Hugging Face
+- **Schema Validation** — Zod validation ensures summaries meet word count and quality constraints
+- **Graceful Degradation** — Analysis failures are non-blocking; pipeline continues with defaults
+
+### News Sources & Scheduling
+- **NewsData.io** — Fetches from 12 categories: technology, business, sports, entertainment, health, science, education, politics, world, nation, lifestyle, opinion
+- **Alpha Vantage** — Real-time stock market news (AAPL, MSFT, GOOGL, TSLA, AMZN)
+- **Cron Schedule** — NewsData at 12:00 AM & 12:00 PM; Alpha Vantage at 8:30 AM, 10:30 AM, 12:30 PM, 2:30 PM, 4:30 PM, 6:30 PM, 8:30 PM
+- **Auto Cleanup** — Removes articles older than 30 days every 15 days
+- **Duplicate Detection** — URL-based deduplication before insert
+
+### Article Intelligence on Cards
+- **Sentiment Badge** — Color-coded badge on each card (green = positive, gray = neutral, red = negative)
+- **Named Entity Chips** — Per-type color coding: amber (people), sky (companies), emerald (places) with border accents
+- **Why It Matters Banner** — Amber insight box below article title; fetches on-demand via Groq if not yet generated
+- **AI Questions Panel** — Expandable Q&A section per card; 2 Socratic questions with short answers; fetches on-demand if not pre-generated; indigo left-border answer style
+- **Bias Chip** — Subtle `Left-lean` / `Balanced` / `Right-lean` chip on image overlay; tooltip shows confidence %; only appears when bias analysis is available
+- **Hashtag Tags** — Auto-generated topic hashtags shown as clickable chips
+- **Reading Time** — Estimated read time for the AI summary (~200 wpm)
+- **Similar Articles** — Expandable section showing 3 related articles based on hashtag overlap (lazy-loaded on click)
+- **Tooltips** — All icon buttons (upvote, downvote, bookmark, TTS, share, comments, highlights, similar) have visible tooltips
+
+### User Interactions
+- **Upvote / Downvote** — React to articles with thumbs up/down; counts shown live; click same button again to undo
+- **Bookmarking** — Save articles for later; synced in real-time; accessible from profile
+- **Bookmark Folders** — Organise bookmarks into named collections (e.g. "Research", "Share later"); create, delete, and assign from the profile page
+- **Text Highlights** — Select any text in an article description to save a highlight in one of four colors (yellow, green, blue, pink); highlights persist per user per article; viewable and deletable from the card
+- **Text-to-Speech** — Browser Web Speech API reads the article summary aloud with stop control; Chrome timing bug handled with cancel-then-speak delay
+- **Daily Briefing** — Reads all article summaries sequentially with play/pause, variable speed (0.75×, 1×, 1.25×, 1.5×, 2×), seek tracking, and minimize-to-pill; close minimizes to a floating pill with pulse indicator; ✕ on pill stops completely
+- **Shareable Cards** — Generate and download/share article images (Twitter, Facebook, LinkedIn, WhatsApp, Telegram, PDF)
+- **Threaded Comments** — Post and reply to comments per article (1-level threading); delete own comments
+
+### Keyboard Shortcuts
+Keyboard-driven navigation — active on the main feed, inactive when typing in input fields:
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Next article |
+| `k` / `↑` | Previous article |
+| `o` / `Enter` | Open focused article in new tab |
+| `b` | Bookmark / unbookmark |
+| `u` | Upvote |
+| `d` | Downvote |
+| `/` | Focus search bar |
+| `?` | Show / hide shortcuts panel |
+| `Esc` | Deselect / close |
+
+### Trending Hashtags
+- Horizontal scrollable strip of top hashtags from the last 48 hours (configurable)
+- Computed in-memory from article hashtag fields — no SQL split required
+- Clicking a tag filters the feed to matching articles; clicking again deselects
+- Left/right chevron arrows appear dynamically based on scroll position (ResizeObserver)
+
+### Personalized Feed
+- **"For You" tab** — Weighted scoring per article per user: category preference match (+3), hashtag overlap with upvoted articles (+2 each), recency decay (+1/(hours+1))
+- **Rank Reason Chips** — Each card shows why it was ranked: "Category match", "N topics you upvoted", "Xh ago"
+- Refreshable on demand; empty state prompts user to upvote articles or set preferences
+
+### Search
+- **Full-text Search** — Search by title or hashtags
+- **Search History** — Last 10 queries stored in localStorage, shown as clickable chips; individual queries removable
+- **Tighter Rate Limit** — Search endpoint capped at 15 req/min (vs. 100/15 min for general API)
+
+### Keyword Alerts
+- **Custom Keyword Alerts** — Set up to 10 keywords; receive email when new articles match
+- **Input Sanitization** — HTML stripped, only alphanumeric/space/hyphen allowed, max 50 chars
+- **Smart Deduplication** — In-memory tracking prevents duplicate alert emails within a process run
+- **Alert Management** — Add/delete keywords from the Profile → Alerts tab
+
+### In-App Notifications
+- Notification bell in header with unread count badge
+- Notifications generated when new articles match keyword alerts
+- Mark individual or all notifications as read; delete notifications
+- Dedicated `/notifications` page
+
+### Reading Streaks & Gamification
+- **Daily Streak** — Tracks consecutive days of reading
+- **Longest Streak** — Personal best recorded
+- **Achievement Badges** — Unlocked at 7-day and 30-day milestones
+- **Auto Reset** — Streak resets automatically if more than 1 day is missed
+
+### Personalized Newsletter
+- **Daily Email Digest** — Sent via SendGrid, curated based on preferred categories
+- **User Stats in Email** — Shows current streak 🔥, best streak 🏆, total articles read 📖
+- **Professional HTML Template** — Responsive, with images and category tags
+- **Frequency Control** — Daily / weekly / never
+- **One-click Unsubscribe** — Public endpoint, no login required
+
+### Observability Dashboard (`/dashboard`)
+- **Stat Cards** — Total articles, users, upvotes, active alerts
+- **Pipeline Success Rate** — % of successful runs from last 20 executions, color-coded health bar
+- **Articles by Category** — Horizontal bar chart (CSS, no library dependency)
+- **Sentiment Breakdown** — Visual distribution of positive/neutral/negative articles
+- **Top Upvoted Articles** — Top 5 most upvoted articles
+- **Pipeline Run Log** — Table of last 20 runs: source, status, saved count, errors, duration, timestamp
+
+### Security
+- **Clerk Authentication** — JWT verification middleware on all protected routes
+- **Rate Limiting** — General: 100 req/15 min; Search: 15 req/1 min
+- **Helmet** — HTTP security headers
+- **Input Sanitization** — Keyword alert inputs sanitized before storage and email rendering
+- **CORS** — Configured for known origins
+
+### Profile Page
+- **Preferences Tab** — Manage category preferences, language, theme, notification frequency
+- **Bookmarks Tab** — View, remove, and organise bookmarked articles into named folders
+- **Alerts Tab** — Add/delete keyword alert subscriptions
+
+### Frontend Architecture
+- **Infinite Scroll** — Lazy pagination on the main feed
+- **Offline Support** — Service worker for offline reading
+- **Dark/Light Mode** — Tailwind CSS theme support
+- **Responsive** — Mobile, tablet, desktop layouts
+- **Session Persistence** — Clerk session restored across refreshes
+
+---
+
+## Database Schema
+
+| Table | Purpose |
+|---|---|
+| `users` | Clerk user IDs, email, premium status, article view count |
+| `articles` | Title, content, hashtags, URL, image, category, sentiment, entities, `why_it_matters`, `questions`, `bias_label`, `bias_score`, bookmark/upvote/downvote counts |
+| `user_bookmarks` | User ↔ article bookmark mapping with optional `folder_id` |
+| `bookmark_folders` | Named bookmark collections per user |
+| `article_comments` | Threaded comments: `body`, `parent_id` (null = top-level) |
+| `article_highlights` | User text selections: `text`, `color` (yellow/green/blue/pink) |
+| `user_preferences` | Categories, language, theme, notification settings |
+| `user_streaks` | Current streak, longest streak, last read date |
+| `article_reactions` | Per-user upvote/downvote per article |
+| `user_alerts` | Keyword alert subscriptions per user |
+| `notifications` | In-app notifications triggered by keyword alert matches |
+| `pipeline_runs` | Every pipeline execution: source, status, counts, duration |
+
+---
+
+## API Endpoints
+
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| GET | `/api/articles` | Optional | Paginated feed (10 free / unlimited authed) |
+| GET | `/api/articles/trending` | Optional | Sorted by bookmark count |
+| GET | `/api/articles/personalized` | Required | Weighted personalized feed with rank reasons |
+| POST | `/api/articles/:id` | Required | Bookmark / unbookmark |
+| POST | `/api/articles/:id/react` | Required | Upvote / downvote (toggle) |
+| GET | `/api/articles/:id/similar` | None | 3 similar articles by hashtag overlap |
+| GET | `/api/articles/:id/comments` | None | Get comments (with user display names) |
+| POST | `/api/articles/:id/comments` | Required | Post comment or reply (`parentId` optional) |
+| DELETE | `/api/articles/:id/comments/:commentId` | Required | Delete own comment (cascades to replies) |
+| GET | `/api/articles/:id/highlights` | Required | Get current user's highlights for article |
+| POST | `/api/articles/:id/highlights` | Required | Save a text highlight with color |
+| DELETE | `/api/articles/:id/highlights/:highlightId` | Required | Delete a highlight |
+| GET | `/api/articles/:id/why-it-matters` | Required | Get (or generate on-demand) the why-it-matters blurb |
+| GET | `/api/articles/:id/questions` | Required | Get (or generate on-demand) 2 Socratic Q&A pairs |
+| GET | `/api/search` | Optional | Search by title or hashtags (rate-limited) |
+| GET | `/api/trending-hashtags` | None | Top hashtags from last N hours |
+| GET | `/api/stock-news` | None | Alpha Vantage stock news |
+| GET | `/api/bookmarks` | Required | User's saved articles (filterable by folder) |
+| GET | `/api/folders` | Required | List bookmark folders |
+| POST | `/api/folders` | Required | Create bookmark folder |
+| DELETE | `/api/folders/:id` | Required | Delete folder (unassigns bookmarks) |
+| PUT | `/api/bookmarks/:articleId/folder` | Required | Assign bookmark to folder (or unassign) |
+| GET | `/api/auth/me` | Required | Current user info |
+| POST | `/api/auth/sync-user` | Required | Sync Clerk user to DB |
+| GET/POST/PUT | `/api/auth/preferences` | Required | Get / create / update preferences |
+| GET | `/api/auth/streak` | Required | Reading streak data |
+| GET | `/api/auth/alerts` | Required | List keyword alerts |
+| POST | `/api/auth/alerts` | Required | Create keyword alert |
+| DELETE | `/api/auth/alerts/:id` | Required | Delete keyword alert |
+| GET | `/api/notifications` | Required | In-app notifications |
+| GET | `/api/notifications/unread-count` | Required | Unread notification count |
+| POST | `/api/notifications/read-all` | Required | Mark all notifications read |
+| POST | `/api/notifications/:id/read` | Required | Mark one notification read |
+| DELETE | `/api/notifications/:id` | Required | Delete notification |
+| GET | `/api/metrics` | Required | Observability dashboard data |
+| POST | `/api/newsletter/unsubscribe` | None | Public unsubscribe |
+| POST | `/api/trigger-pipeline` | None | Manual pipeline trigger |
+| POST | `/api/trigger-newsletter` | None | Manual newsletter trigger |
+
+---
 
 ## Scheduled Jobs
 
-- **12:00 AM & 12:00 PM** - Run news pipeline (fetch, summarize, store articles)
-- **2:00 AM** - Cleanup old articles (runs every 15 days)
-- **Daily at configured time** - Send newsletter to all users (default: 8:00 AM)
+| Time | Job |
+|---|---|
+| 12:00 AM, 12:00 PM | NewsData pipeline (fetch → summarize → sentiment/NER/why-it-matters → save → Telegram) |
+| 8:30 AM – 8:30 PM (every 2h) | Alpha Vantage stock pipeline |
+| 2:00 AM | Article cleanup (if 15+ days since last run) |
+| 8:00 AM (configurable) | Daily newsletter to all subscribed users |
+| After each pipeline run | Keyword alert check against newly published articles |
 
+---
 
-## Key Features Highlights
+## Setup
 
-✅ AI-powered dual summarization (titles + content)
-✅ Multi-language summarization support
-✅ Browser-based text-to-speech for articles
-✅ Reading streak tracking with achievement badges
-✅ Fully automated daily newsletter system
-✅ Personalized content based on user preferences
-✅ Professional HTML email templates
-✅ One-click unsubscribe from emails
-✅ Auto-generated hashtags
-✅ Real-time bookmark synchronization
-✅ Responsive mobile-first design
-✅ Infinite scroll pagination
-✅ Telegram integration
-✅ SendGrid email delivery
-✅ Clerk authentication
-✅ Shareable article images for social media
+```bash
+# Backend
+npm install
+cp .env.example .env   # fill in keys
+npm run db:migrate
+npm run dev
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+### Required Environment Variables
+
+```
+DATABASE_URL=
+DATABASE_AUTH_TOKEN=
+GROQ_API_KEY=
+NEWSDATA_API_KEY=
+SENDGRID_API_KEY=
+SENDGRID_FROM_EMAIL=
+TELEGRAM_ACCESS_TOKEN=
+TELEGRAM_CHANNEL_ID=
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+NEXT_PUBLIC_API_URL=http://localhost:3000
+```
+
+### Optional
+
+```
+HUGGING_FACE_API_KEY=       # for hashtag generation
+ALPHA_VANTAGE_API_KEY=      # for stock news
+NEWSLETTER_ARTICLES_COUNT=5
+GROQ_MODEL=llama-3.1-8b-instant
+```

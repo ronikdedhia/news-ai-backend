@@ -1,5 +1,5 @@
 import { db } from '../db/client';
-import { users, userPreferences, articles } from '../db/schema';
+import { users, userPreferences, articles, userStreaks } from '../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 import { sendGridService } from './sendgrid.service';
@@ -89,10 +89,25 @@ class NewsletterService {
     return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
   }
 
+  private async getUserStats(userId: string): Promise<{ currentStreak: number; longestStreak: number; articlesViewed: number }> {
+    const [streakRow, userRow] = await Promise.all([
+      db.select({ currentStreak: userStreaks.currentStreak, longestStreak: userStreaks.longestStreak })
+        .from(userStreaks).where(eq(userStreaks.userId, userId)).limit(1),
+      db.select({ articlesViewedCount: users.articlesViewedCount })
+        .from(users).where(eq(users.id, userId)).limit(1),
+    ]);
+
+    return {
+      currentStreak: streakRow[0]?.currentStreak ?? 0,
+      longestStreak: streakRow[0]?.longestStreak ?? 0,
+      articlesViewed: userRow[0]?.articlesViewedCount ?? 0,
+    };
+  }
+
   /**
    * Build HTML email template
    */
-  private buildEmailTemplate(userFirstName: string, articlesList: NewsletterArticle[]): string {
+  private buildEmailTemplate(userFirstName: string, articlesList: NewsletterArticle[], stats?: { currentStreak: number; longestStreak: number; articlesViewed: number }): string {
     const articlesHtml = articlesList
       .map(
         (article, index) => `
@@ -142,10 +157,29 @@ class NewsletterService {
             <p style="font-size: 16px; margin-bottom: 20px;">
               Hi ${userFirstName},
             </p>
-            <p style="color: #666; margin-bottom: 30px;">
+            <p style="color: #666; margin-bottom: 20px;">
               Here are today's top stories tailored to your interests. Click on any article to read the full story.
             </p>
-            
+
+            ${stats ? `
+            <div style="display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:120px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:24px;">🔥</div>
+                <div style="font-size:22px;font-weight:700;color:#667eea;">${stats.currentStreak}</div>
+                <div style="font-size:12px;color:#888;">day streak</div>
+              </div>
+              <div style="flex:1;min-width:120px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:24px;">🏆</div>
+                <div style="font-size:22px;font-weight:700;color:#667eea;">${stats.longestStreak}</div>
+                <div style="font-size:12px;color:#888;">best streak</div>
+              </div>
+              <div style="flex:1;min-width:120px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:24px;">📖</div>
+                <div style="font-size:22px;font-weight:700;color:#667eea;">${stats.articlesViewed}</div>
+                <div style="font-size:12px;color:#888;">articles read</div>
+              </div>
+            </div>` : ''}
+
             ${articlesHtml}
             
             <!-- Commented out - website not deployed yet
@@ -196,7 +230,8 @@ class NewsletterService {
       }
 
       // Build email
-      const html = this.buildEmailTemplate(user.firstName || 'there', articlesList);
+      const stats = await this.getUserStats(userId);
+      const html = this.buildEmailTemplate(user.firstName || 'there', articlesList, stats);
 
       // Send email
       const sent = await sendGridService.sendEmail({

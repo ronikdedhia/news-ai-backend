@@ -1,5 +1,6 @@
-import axios from 'axios';
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
+import { normalizeCategory } from '../constants/categories';
 import { articleService } from './article.service';
 import { newsDataService } from './newsdata.service';
 import { alphaVantageService } from './alpha-vantage.service';
@@ -8,6 +9,24 @@ import { hashtagService } from './hashtag.service';
 import { telegramService } from './telegram.service';
 import { NewArticle } from '../db/schema';
 import { Article } from '../types';
+
+async function analyzeAndAttach(articleId: string, title: string, content: string) {
+  try {
+    const analysis = await groqService.analyzeArticle(title, content);
+    await articleService.updateArticleAnalysis(articleId, analysis.sentiment, analysis.entities);
+
+    const why = await groqService.generateWhyItMatters(title, content);
+    if (why) await articleService.updateWhyItMatters(articleId, why);
+
+    const questions = await groqService.generateQuestions(title, content);
+    if (questions.length) await articleService.updateArticleQuestions(articleId, questions);
+
+    const bias = await groqService.detectBias(title, content);
+    if (bias.label) await articleService.updateArticleBias(articleId, bias.label, bias.score);
+  } catch (e: any) {
+    logger.warn(`analyzeAndAttach skipped for ${articleId}: ${e.message}`);
+  }
+}
 
 class PipelineService {
   /**
@@ -40,7 +59,7 @@ class PipelineService {
         imageUrl: news.image_path,
         source: news.source,
         publishedAt: new Date(news.published_at),
-        category: 'Business',
+        category: 'business',
         language: 'English',
         country: 'USA',
       }));
@@ -107,13 +126,13 @@ class PipelineService {
 
           // Save article with summaries and hashtags
           const result = await articleService.saveArticles([{
-            id: article.id,
+            id: randomUUID(),
             title: titleSummary,
             url: article.url,
             content: contentSummary,
             publishedAt: article.publishedAt instanceof Date ? article.publishedAt.toISOString() : String(article.publishedAt),
             imageUrl: article.imageUrl,
-            category: article.category,
+            category: normalizeCategory(article.category),
             hashtags: hashtags.join(' '),
             bookmarkCount: 0,
           }]);
@@ -121,27 +140,30 @@ class PipelineService {
           saved += result.saved;
           logger.info(`✅ Saved article: ${titleSummary}`);
 
-          // Send to Telegram if article was saved
+          // Send to Telegram + run analysis if article was saved
           if (result.savedArticles.length > 0) {
+            const savedId = result.savedArticles[0].id;
+            analyzeAndAttach(savedId, titleSummary, contentSummary).catch(() => {});
+
             try {
               const savedArticle = result.savedArticles[0];
               const hashtagsArray = savedArticle.hashtags ? savedArticle.hashtags.split(/\s+/) : [];
-              
-              await telegramService.sendMessage({
+
+              const tgSent = await telegramService.sendMessage({
                 title: savedArticle.title,
                 content: savedArticle.content || 'No content available',
                 hashtags: hashtagsArray,
                 url: article.url,
                 imageUrl: savedArticle.imageUrl,
               });
-              telegramSent++;
+              if (tgSent) telegramSent++;
             } catch (telegramError: any) {
               logger.warn(`⚠️  Failed to send to Telegram: ${telegramError.message}`);
             }
           }
 
           // Rate limiting - wait between articles
-          await this.delay(1000);
+          await this.delay(2000);
         } catch (articleError: any) {
           errors++;
           logger.error(`❌ Failed to process article: ${articleError.message}`);
@@ -198,13 +220,13 @@ class PipelineService {
           const hashtags = await hashtagService.generateHashtags(article.title);
 
           const result = await articleService.saveArticles([{
-            id: article.id,
+            id: randomUUID(),
             title: titleSummary,
             url: article.url,
             content: contentSummary,
             publishedAt: article.publishedAt instanceof Date ? article.publishedAt.toISOString() : String(article.publishedAt),
             imageUrl: article.imageUrl,
-            category: article.category,
+            category: normalizeCategory(article.category),
             hashtags: hashtags.join(' '),
             bookmarkCount: 0,
           }]);
@@ -213,24 +235,27 @@ class PipelineService {
           logger.info(`✅ Saved article: ${titleSummary}`);
 
           if (result.savedArticles.length > 0) {
+            const savedId = result.savedArticles[0].id;
+            analyzeAndAttach(savedId, titleSummary, contentSummary).catch(() => {});
+
             try {
               const savedArticle = result.savedArticles[0];
               const hashtagsArray = savedArticle.hashtags ? savedArticle.hashtags.split(/\s+/) : [];
-              
-              await telegramService.sendMessage({
+
+              const tgSent = await telegramService.sendMessage({
                 title: savedArticle.title,
                 content: savedArticle.content || 'No content available',
                 hashtags: hashtagsArray,
                 url: article.url,
                 imageUrl: savedArticle.imageUrl,
               });
-              telegramSent++;
+              if (tgSent) telegramSent++;
             } catch (telegramError: any) {
               logger.warn(`⚠️  Failed to send to Telegram: ${telegramError.message}`);
             }
           }
 
-          await this.delay(1000);
+          await this.delay(2000);
         } catch (articleError: any) {
           errors++;
           logger.error(`❌ Failed to process article: ${articleError.message}`);
@@ -277,13 +302,13 @@ class PipelineService {
           const hashtags = await hashtagService.generateHashtags(article.title);
 
           const result = await articleService.saveArticles([{
-            id: article.id,
+            id: randomUUID(),
             title: titleSummary,
             url: article.url,
             content: contentSummary,
             publishedAt: article.publishedAt instanceof Date ? article.publishedAt.toISOString() : String(article.publishedAt),
             imageUrl: article.imageUrl,
-            category: article.category,
+            category: normalizeCategory(article.category),
             hashtags: hashtags.join(' '),
             bookmarkCount: 0,
           }]);
@@ -292,24 +317,27 @@ class PipelineService {
           logger.info(`✅ Saved article: ${titleSummary}`);
 
           if (result.savedArticles.length > 0) {
+            const savedId = result.savedArticles[0].id;
+            analyzeAndAttach(savedId, titleSummary, contentSummary).catch(() => {});
+
             try {
               const savedArticle = result.savedArticles[0];
               const hashtagsArray = savedArticle.hashtags ? savedArticle.hashtags.split(/\s+/) : [];
-              
-              await telegramService.sendMessage({
+
+              const tgSent = await telegramService.sendMessage({
                 title: savedArticle.title,
                 content: savedArticle.content || 'No content available',
                 hashtags: hashtagsArray,
                 url: article.url,
                 imageUrl: savedArticle.imageUrl,
               });
-              telegramSent++;
+              if (tgSent) telegramSent++;
             } catch (telegramError: any) {
               logger.warn(`⚠️  Failed to send to Telegram: ${telegramError.message}`);
             }
           }
 
-          await this.delay(1000);
+          await this.delay(2000);
         } catch (articleError: any) {
           errors++;
           logger.error(`❌ Failed to process article: ${articleError.message}`);
