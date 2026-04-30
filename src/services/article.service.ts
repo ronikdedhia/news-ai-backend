@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { articles, NewArticle } from '../db/schema';
-import { eq, desc, sql, and, or, like, ne } from 'drizzle-orm';
+import { eq, desc, sql, and, or, like, ne, notInArray } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 
 class ArticleService {
@@ -145,30 +145,32 @@ class ArticleService {
       .where(eq(articles.id, articleId));
   }
 
-  async getArticles(limit: number = 10, offset: number = 0) {
-    return db
-      .select({
-        id: articles.id,
-        title: articles.title,
-        content: articles.content,
-        hashtags: articles.hashtags,
-        url: articles.url,
-        imageUrl: articles.imageUrl,
-        publishedAt: articles.publishedAt,
-        category: articles.category,
-        upvoteCount: articles.upvoteCount,
-        downvoteCount: articles.downvoteCount,
-        sentiment: articles.sentiment,
-        entities: articles.entities,
-        whyItMatters: articles.whyItMatters,
-        questions: articles.questions,
-        biasLabel: articles.biasLabel,
-        biasScore: articles.biasScore,
-      })
-      .from(articles)
-      .limit(limit)
-      .offset(offset)
-      .orderBy(desc(articles.publishedAt));
+  async getArticles(limit: number = 10, offset: number = 0, excludeIds: string[] = []) {
+    const cols = {
+      id: articles.id,
+      title: articles.title,
+      content: articles.content,
+      hashtags: articles.hashtags,
+      url: articles.url,
+      imageUrl: articles.imageUrl,
+      publishedAt: articles.publishedAt,
+      category: articles.category,
+      upvoteCount: articles.upvoteCount,
+      downvoteCount: articles.downvoteCount,
+      sentiment: articles.sentiment,
+      entities: articles.entities,
+      whyItMatters: articles.whyItMatters,
+      questions: articles.questions,
+      biasLabel: articles.biasLabel,
+      biasScore: articles.biasScore,
+    };
+    if (excludeIds.length > 0) {
+      return db.select(cols).from(articles)
+        .where(notInArray(articles.id, excludeIds))
+        .limit(limit).offset(offset).orderBy(desc(articles.publishedAt));
+    }
+    return db.select(cols).from(articles)
+      .limit(limit).offset(offset).orderBy(desc(articles.publishedAt));
   }
 
   /**
@@ -314,31 +316,35 @@ class ArticleService {
       .orderBy(desc(articles.publishedAt));
   }
 
-  async getRecentArticles(limit: number = 60) {
-    return db
-      .select({
-        id: articles.id,
-        title: articles.title,
-        content: articles.content,
-        hashtags: articles.hashtags,
-        url: articles.url,
-        imageUrl: articles.imageUrl,
-        publishedAt: articles.publishedAt,
-        bookmarkCount: articles.bookmarkCount,
-        upvoteCount: articles.upvoteCount,
-        downvoteCount: articles.downvoteCount,
-        sentiment: articles.sentiment,
-        entities: articles.entities,
-        category: articles.category,
-        whyItMatters: articles.whyItMatters,
-        questions: articles.questions,
-        biasLabel: articles.biasLabel,
-        biasScore: articles.biasScore,
-      })
-      .from(articles)
-      .where(sql`datetime(${articles.publishedAt}) > datetime('now', '-7 days')`)
-      .limit(limit)
-      .orderBy(desc(articles.publishedAt));
+  async getRecentArticles(limit: number = 60, excludeIds: string[] = []) {
+    const cols = {
+      id: articles.id,
+      title: articles.title,
+      content: articles.content,
+      hashtags: articles.hashtags,
+      url: articles.url,
+      imageUrl: articles.imageUrl,
+      publishedAt: articles.publishedAt,
+      bookmarkCount: articles.bookmarkCount,
+      upvoteCount: articles.upvoteCount,
+      downvoteCount: articles.downvoteCount,
+      sentiment: articles.sentiment,
+      entities: articles.entities,
+      category: articles.category,
+      whyItMatters: articles.whyItMatters,
+      questions: articles.questions,
+      biasLabel: articles.biasLabel,
+      biasScore: articles.biasScore,
+    };
+    const recencyCondition = sql`datetime(${articles.publishedAt}) > datetime('now', '-7 days')`;
+    if (excludeIds.length > 0) {
+      return db.select(cols).from(articles)
+        .where(and(recencyCondition, notInArray(articles.id, excludeIds)))
+        .limit(limit).orderBy(desc(articles.publishedAt));
+    }
+    return db.select(cols).from(articles)
+      .where(recencyCondition)
+      .limit(limit).orderBy(desc(articles.publishedAt));
   }
 
   /**

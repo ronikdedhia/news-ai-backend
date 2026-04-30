@@ -18,8 +18,9 @@ import { folderService } from './services/folder.service';
 import { highlightService } from './services/highlight.service';
 import { groqService } from './services/groq.service';
 import { initializeDatabase, db } from './db/client';
-import { users, articleReactions, articles as articlesTable, userPreferences } from './db/schema';
-import { eq, and, inArray, gte } from 'drizzle-orm';
+import { users, articleReactions, articles as articlesTable, userPreferences, userDismissals, userBookmarks, userStreaks } from './db/schema';
+import { eq, and, inArray, gte, sql as drizzleSql } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
 import { alphaVantageService } from './services/alpha-vantage.service';
 
@@ -195,8 +196,13 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
         }
       }
 
-      // Premium users: unlimited access
-      const articles = await articleService.getArticles(limit, offset);
+      // Fetch dismissed article IDs to exclude from feed
+      const dismissedRows = await db.select({ articleId: userDismissals.articleId })
+        .from(userDismissals).where(eq(userDismissals.userId, req.user.id));
+      const excludeIds = dismissedRows.map(r => r.articleId);
+
+      // Premium users: unlimited access (excluding dismissed)
+      const articles = await articleService.getArticles(limit, offset, excludeIds);
 
       // Get bookmark and reaction status for all articles in one query
       const articleIds = articles.map(a => a.id);
@@ -329,6 +335,11 @@ app.post('/api/auth/sync-user', verifyClerkToken, async (req: Request, res: Resp
         firstName: firstName || req.user.firstName,
         lastName: lastName || req.user.lastName,
       });
+
+      // Update lastLoginAt on every sign-in sync
+      await db.update(users)
+        .set({ lastLoginAt: new Date().toISOString() })
+        .where(eq(users.id, req.user.id));
 
       res.json({
         success: true,
@@ -809,8 +820,11 @@ app.get('/api/articles/personalized', verifyClerkToken, async (req: Request, res
       }
     });
 
-    // 3. Fetch recent articles (last 7 days)
-    const recent = await articleService.getRecentArticles(60);
+    // 3. Fetch recent articles (last 7 days), excluding dismissed
+    const dismissedForPersonalized = await db.select({ articleId: userDismissals.articleId })
+      .from(userDismissals).where(eq(userDismissals.userId, userId));
+    const excludeIdsForPersonalized = dismissedForPersonalized.map(r => r.articleId);
+    const recent = await articleService.getRecentArticles(60, excludeIdsForPersonalized);
 
     // 4. Score each article with reasons
     const now = Date.now();
@@ -1157,6 +1171,149 @@ app.get('/api/articles/:id/questions', verifyClerkToken, async (req: Request, re
       await articleService.updateArticleQuestions(req.params.id as string, questions);
     }
     return res.json({ success: true, questions });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ── Dismiss Article ───────────────────────────────────────────────────────────
+
+app.post('/api/articles/:id/dismiss', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const articleId = req.params.id as string;
+    // Idempotent — ignore if already dismissed
+    const existing = await db.select({ id: userDismissals.id })
+      .from(userDismissals)
+      .where(and(eq(userDismissals.userId, req.user.id), eq(userDismissals.articleId, articleId)))
+      .limit(1);
+    if (!existing.length) {
+      await db.insert(userDismissals).values({
+        id: uuidv4(),
+        userId: req.user.id,
+        articleId,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return res.json({ success: true });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ── Weekly Wrap ───────────────────────────────────────────────────────────────
+
+app.get('/api/auth/weekly-wrap', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const userId = req.user.id;
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [userRow, streakRow, reactionsThisWeek, bookmarksThisWeek] = await Promise.all([
+      db.select({ articlesViewedCount: users.articlesViewedCount, firstName: users.firstName })
+        .from(users).where(eq(users.id, userId)).limit(1),
+      db.select({ currentStreak: userStreaks.currentStreak })
+        .from(userStreaks).where(eq(userStreaks.userId, userId)).limit(1),
+      db.select({ category: articlesTable.category, hashtags: articlesTable.hashtags })
+        .from(articleReactions)
+        .innerJoin(articlesTable, eq(articleReactions.articleId, articlesTable.id))
+        .where(and(eq(articleReactions.userId, userId), gte(articleReactions.createdAt, weekAgo))),
+      db.select({ count: drizzleSql<number>`count(*)` })
+        .from(userBookmarks)
+        .where(and(eq(userBookmarks.userId, userId), gte(userBookmarks.createdAt, weekAgo))),
+    ]);
+
+    // Top category from this week's reactions
+    const catCounts: Record<string, number> = {};
+    for (const r of reactionsThisWeek) {
+      if (r.category) catCounts[r.category] = (catCounts[r.category] || 0) + 1;
+    }
+    const topCategory = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    // Top hashtag from this week's reactions
+    const tagCounts: Record<string, number> = {};
+    for (const r of reactionsThisWeek) {
+      if (r.hashtags) {
+        r.hashtags.split(/\s+/).filter((t: string) => t.startsWith('#')).forEach((t: string) => {
+          tagCounts[t] = (tagCounts[t] || 0) + 1;
+        });
+      }
+    }
+    const topHashtag = Object.entries(tagCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    return res.json({
+      success: true,
+      wrap: {
+        articlesViewed: userRow[0]?.articlesViewedCount || 0,
+        streak: streakRow[0]?.currentStreak || 0,
+        topCategory,
+        topHashtag,
+        reactionsThisWeek: reactionsThisWeek.length,
+        bookmarksThisWeek: Number(bookmarksThisWeek[0]?.count) || 0,
+        firstName: userRow[0]?.firstName || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ── Catch-Up Brief ───────────────────────────────────────────────────────────
+
+app.get('/api/auth/catchup-brief', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const userId = req.user.id;
+
+    const userRow = await db.select({ lastLoginAt: users.lastLoginAt })
+      .from(users).where(eq(users.id, userId)).limit(1);
+
+    const lastLogin = userRow[0]?.lastLoginAt;
+    const now = new Date();
+    const hoursSince = lastLogin
+      ? (now.getTime() - new Date(lastLogin).getTime()) / 3_600_000
+      : Infinity;
+
+    // Only generate brief if user was away >24h
+    if (hoursSince < 24) {
+      return res.json({ success: true, shouldShow: false });
+    }
+
+    // Fetch articles published since last login (or last 48h if no prior login)
+    const since = lastLogin ?? new Date(now.getTime() - 48 * 3_600_000).toISOString();
+    const newArticles = await db
+      .select({ id: articlesTable.id, title: articlesTable.title })
+      .from(articlesTable)
+      .where(gte(articlesTable.publishedAt, since))
+      .orderBy(articlesTable.upvoteCount)
+      .limit(50);
+
+    const count = newArticles.length;
+
+    // Update lastLoginAt now (before the slow Groq call)
+    await db.update(users)
+      .set({ lastLoginAt: now.toISOString() })
+      .where(eq(users.id, userId));
+
+    if (count === 0) {
+      return res.json({ success: true, shouldShow: false });
+    }
+
+    // Summarize top 5 headlines
+    const top5 = newArticles.slice(0, 5).map(a => a.title);
+    const summary = await groqService.generateCatchUpBrief(top5);
+
+    return res.json({
+      success: true,
+      shouldShow: true,
+      count,
+      summary,
+      since,
+      hoursAway: Math.round(hoursSince),
+    });
   } catch (error: any) {
     logger.error('API Error:', error);
     return res.status(500).json({ success: false, error: error.message });

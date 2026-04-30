@@ -10,6 +10,7 @@ export const users = sqliteTable(
     profileImageUrl: text('profile_image_url'),
     isPremium: integer('is_premium').notNull().default(0),
     articlesViewedCount: integer('articles_viewed_count').notNull().default(0),
+    lastLoginAt: text('last_login_at'),
     createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
     updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
   },
@@ -189,6 +190,19 @@ export const notifications = sqliteTable(
   })
 );
 
+export const userDismissals = sqliteTable(
+  'user_dismissals',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    articleId: text('article_id').notNull(),
+    createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+  },
+  (table) => ({
+    userArticleIdx: index('user_dismissals_user_article_key').on(table.userId, table.articleId),
+  })
+);
+
 export const pipelineRuns = sqliteTable(
   'pipeline_runs',
   {
@@ -223,6 +237,7 @@ export type ArticleReaction = typeof articleReactions.$inferSelect;
 export type UserAlert = typeof userAlerts.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type PipelineRun = typeof pipelineRuns.$inferSelect;
+export type UserDismissal = typeof userDismissals.$inferSelect;
 export type BookmarkFolder = typeof bookmarkFolders.$inferSelect;
 export type ArticleComment = typeof articleComments.$inferSelect;
 export type ArticleHighlight = typeof articleHighlights.$inferSelect;

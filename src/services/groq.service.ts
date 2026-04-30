@@ -272,6 +272,28 @@ Rules:
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async generateCatchUpBrief(headlines: string[]): Promise<string> {
+    try {
+      const list = headlines.map((h, i) => `${i + 1}. ${h}`).join('\n');
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a news briefing assistant. Given a list of news headlines, write exactly 2 sentences that capture the most important stories. Be direct and informative. No filler phrases like "Here is" or "In summary". Start immediately with the news.',
+          },
+          { role: 'user', content: list },
+        ],
+        model: config.groq.model,
+        temperature: 0.2,
+        max_tokens: 120,
+      }));
+      return completion.choices[0]?.message?.content?.trim() || '';
+    } catch (error: any) {
+      logger.warn(`generateCatchUpBrief failed: ${error.message}`);
+      return '';
+    }
+  }
+
   private async callWithRetry<T>(fn: () => Promise<T>, retries = 4, baseDelay = 2000): Promise<T> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {

@@ -4,11 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth, useUser } from '@clerk/nextjs'
 import Link from 'next/link'
 import { useApiClient } from '@/lib/useApiClient'
-import { fetchArticles, fetchPersonalizedArticles, Article, syncUser, searchArticles } from '@/lib/api'
+import { fetchArticles, fetchPersonalizedArticles, Article, syncUser, searchArticles, dismissArticle } from '@/lib/api'
 import { saveArticlesOffline, getOfflineArticles } from '@/lib/offlineStorage'
 import { useOffline } from '@/lib/useOffline'
 import { NewsCard } from './NewsCard'
 import { CategoryFilter } from './CategoryFilter'
+import { WeeklyWrapButton } from './WeeklyWrap'
+import { CatchUpBrief } from './CatchUpBrief'
 import { DailyBriefing } from './DailyBriefing'
 import { TrendingHashtags } from './TrendingHashtags'
 import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp'
@@ -35,6 +37,34 @@ export function NewsFeed() {
   const [personalizedArticles, setPersonalizedArticles] = useState<(Article & { isBookmarked?: boolean })[]>([])
   const [personalizedLoading, setPersonalizedLoading] = useState(false)
   const [personalizedError, setPersonalizedError] = useState<string | null>(null)
+
+  // source filter
+  const [selectedSource, setSelectedSource] = useState<string | null>(null)
+
+  // read/unread tracking
+  const [readArticleIds, setReadArticleIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const stored = localStorage.getItem('db_read_articles')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch { return new Set() }
+  })
+
+  const handleDismiss = useCallback((id: string) => {
+    setArticles(prev => prev.filter(a => a.id !== id))
+    setPersonalizedArticles(prev => prev.filter(a => a.id !== id))
+    dismissArticle(id).catch(() => {})
+  }, [])
+
+  const markAsRead = useCallback((id: string) => {
+    setReadArticleIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      try { localStorage.setItem('db_read_articles', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }, [])
 
   // sentiment filter
   const [hiddenSentiments, setHiddenSentiments] = useState<Set<string>>(new Set())
@@ -159,6 +189,7 @@ export function NewsFeed() {
   const handleFeedModeChange = (mode: 'latest' | 'foryou') => {
     setFeedMode(mode)
     setSelectedCategory(null)
+    setSelectedSource(null)
     if (mode === 'foryou' && personalizedArticles.length === 0) {
       loadPersonalized()
     }
@@ -313,14 +344,34 @@ export function NewsFeed() {
     ))
   }
 
+  // Derive available sources sorted by article count
+  const availableSources = (() => {
+    const counts: Record<string, number> = {}
+    for (const a of articles) {
+      try {
+        const d = new URL(a.url).hostname.replace(/^www\./, '')
+        if (d) counts[d] = (counts[d] || 0) + 1
+      } catch {}
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([d]) => d)
+  })()
+
   // Filter articles by selected category
-  const filteredArticles = selectedCategory
+  const categoryFiltered = selectedCategory
     ? selectedCategory === 'others'
       ? articles.filter(article => !article.category || article.category.trim() === '')
       : articles.filter(article => article.category?.toLowerCase() === selectedCategory.toLowerCase())
     : articles
 
-  // Apply sentiment filter on top of category filter
+  // Apply source filter
+  const filteredArticles = selectedSource
+    ? categoryFiltered.filter(a => {
+        try { return new URL(a.url).hostname.replace(/^www\./, '') === selectedSource }
+        catch { return false }
+      })
+    : categoryFiltered
+
+  // Apply sentiment filter on top of category + source filter
   const sentimentFiltered = hiddenSentiments.size > 0
     ? filteredArticles.filter(a => !a.sentiment || !hiddenSentiments.has(a.sentiment))
     : filteredArticles
@@ -367,6 +418,7 @@ export function NewsFeed() {
 
   const handleCategoryChange = (category: string | null) => {
     setSelectedCategory(category)
+    setSelectedSource(null)
     setError(null)
     setTrendingTag(null)
     setHashtagArticles([])
@@ -390,6 +442,9 @@ export function NewsFeed() {
         triggerAction={focusedIdx === idx ? pendingAction : null}
         onActionDone={() => setPendingAction(null)}
         onBookmarkChange={onBMChange}
+        isRead={readArticleIds.has(article.id)}
+        onRead={() => markAsRead(article.id)}
+        onDismiss={isSignedIn ? () => handleDismiss(article.id) : undefined}
       />
       {showRank && article._rankReason && (
         <div className="flex items-center gap-1.5 px-1 flex-wrap">
@@ -468,6 +523,9 @@ export function NewsFeed() {
                 </button>
               </div>
             )}
+            {isSignedIn && (
+              <WeeklyWrapButton className="p-2 rounded-xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-md border border-white/40 dark:border-white/10 text-muted-foreground hover:text-foreground transition-colors" />
+            )}
             <button
               onClick={() => setShowShortcuts(true)}
               title="Keyboard shortcuts (?)"
@@ -482,6 +540,9 @@ export function NewsFeed() {
         {isSignedIn && feedMode === 'latest' && articles.length > 0 && (
           <DailyBriefing articles={articles} />
         )}
+
+        {/* Catch-up brief — only on latest tab, signed-in users */}
+        {isSignedIn && feedMode === 'latest' && <CatchUpBrief />}
 
         {/* Latest tab: Category filter + Trending + Search */}
         {feedMode === 'latest' && (
@@ -521,6 +582,44 @@ export function NewsFeed() {
                 </button>
               )}
             </div>
+
+            {/* Source filter */}
+            {availableSources.length > 1 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50 shrink-0">Source</span>
+                <button
+                  onClick={() => setSelectedSource(null)}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-all duration-150 ${
+                    selectedSource === null
+                      ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-400/40'
+                      : 'bg-black/[0.04] dark:bg-white/[0.05] text-muted-foreground/60 border-black/[0.06] dark:border-white/[0.06] hover:text-foreground'
+                  }`}
+                >
+                  All
+                </button>
+                {availableSources.map(src => (
+                  <button
+                    key={src}
+                    onClick={() => setSelectedSource(selectedSource === src ? null : src)}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-all duration-150 ${
+                      selectedSource === src
+                        ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-400/40'
+                        : 'bg-black/[0.04] dark:bg-white/[0.05] text-muted-foreground/60 border-black/[0.06] dark:border-white/[0.06] hover:text-foreground'
+                    }`}
+                  >
+                    {src}
+                  </button>
+                ))}
+                {selectedSource && (
+                  <button
+                    onClick={() => setSelectedSource(null)}
+                    className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Trending Hashtags strip */}
             <TrendingHashtags onSelect={handleTrendingSelect} selectedTag={trendingTag} />

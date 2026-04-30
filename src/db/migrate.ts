@@ -346,6 +346,50 @@ async function runMigrations() {
       }
     }
 
+    // Create user_streaks table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS user_streaks (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        current_streak INTEGER NOT NULL DEFAULT 0,
+        longest_streak INTEGER NOT NULL DEFAULT 0,
+        last_article_read_date TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+    logger.info('✅ Created user_streaks table');
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_user_streaks_user_id ON user_streaks(user_id)
+    `);
+
+    // Create user_dismissals table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS user_dismissals (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        article_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (article_id) REFERENCES articles(id)
+      )
+    `);
+    logger.info('✅ Created user_dismissals table');
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_user_dismissals_user_article ON user_dismissals(user_id, article_id)
+    `);
+
+    // Add last_login_at column to users
+    try {
+      await client.execute(`ALTER TABLE users ADD COLUMN last_login_at TEXT`);
+      logger.info('✅ Added last_login_at column to users');
+    } catch (e: any) {
+      if (e.message.includes('duplicate column')) {
+        logger.info('ℹ️  last_login_at column already exists');
+      } else throw e;
+    }
+
     logger.info('✅ All migrations completed successfully!');
     process.exit(0);
   } catch (error: any) {

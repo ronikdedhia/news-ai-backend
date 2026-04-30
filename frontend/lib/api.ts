@@ -532,4 +532,42 @@ export const fetchQuestions = async (articleId: string): Promise<Array<{ q: stri
   } catch { return [] }
 }
 
+// ── Dismiss ───────────────────────────────────────────────────────────────────
+
+export const dismissArticle = async (articleId: string): Promise<void> => {
+  await apiClient.post(`/api/articles/${encodeURIComponent(articleId)}/dismiss`)
+}
+
+// ── Weekly Wrap ───────────────────────────────────────────────────────────────
+
+export interface WeeklyWrap {
+  articlesViewed: number
+  streak: number
+  topCategory: string | null
+  topHashtag: string | null
+  reactionsThisWeek: number
+  bookmarksThisWeek: number
+  firstName: string | null
+}
+
+export const getWeeklyWrap = async (): Promise<WeeklyWrap> => {
+  const response = await apiClient.get('/api/auth/weekly-wrap')
+  return response.data.wrap
+}
+
+// ── Catch-Up Brief ────────────────────────────────────────────────────────────
+
+export interface CatchUpBriefResponse {
+  shouldShow: boolean
+  count?: number
+  summary?: string
+  since?: string
+  hoursAway?: number
+}
+
+export const getCatchUpBrief = async (): Promise<CatchUpBriefResponse> => {
+  const response = await apiClient.get('/api/auth/catchup-brief')
+  return response.data
+}
+
 export default apiClient

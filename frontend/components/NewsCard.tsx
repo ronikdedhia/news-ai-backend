@@ -7,7 +7,7 @@ import { useAuth } from '@clerk/nextjs'
 import {
   ExternalLink, Volume2, Square, Bookmark, ThumbsUp, ThumbsDown,
   ChevronDown, ChevronUp, User, Building2, MapPin,
-  TrendingUp, TrendingDown, Minus, MessageSquare, Lightbulb, Highlighter, Trash2, FolderOpen, Check, HelpCircle,
+  TrendingUp, TrendingDown, Minus, MessageSquare, Lightbulb, Highlighter, Trash2, FolderOpen, Check, HelpCircle, EyeOff,
 } from 'lucide-react'
 import { Article, Entity, SimilarArticle, Highlight, BookmarkFolder, addBookmark, removeBookmark, reactToArticle, getSimilarArticles, getHighlights, addHighlight, deleteHighlight, fetchWhyItMatters, fetchQuestions, getFolders, assignToFolder } from '@/lib/api'
 import { ShareableImage } from '@/components/ShareableImage'
@@ -111,9 +111,12 @@ interface NewsCardProps {
   isFocused?: boolean
   triggerAction?: { action: 'bookmark' | 'upvote' | 'downvote' | 'open'; seq: number } | null
   onActionDone?: () => void
+  isRead?: boolean
+  onRead?: () => void
+  onDismiss?: () => void
 }
 
-export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, onActionDone }: NewsCardProps) {
+export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, onActionDone, isRead, onRead, onDismiss }: NewsCardProps) {
   const { isSignedIn } = useAuth()
   const [isSpeaking, setIsSpeaking]     = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(article.isBookmarked || false)
@@ -333,7 +336,7 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
     if (triggerAction.action === 'bookmark') handleBookmark()
     else if (triggerAction.action === 'upvote') handleReaction('upvote')
     else if (triggerAction.action === 'downvote') handleReaction('downvote')
-    else if (triggerAction.action === 'open') window.open(article.url, '_blank', 'noopener,noreferrer')
+    else if (triggerAction.action === 'open') { onRead?.(); window.open(article.url, '_blank', 'noopener,noreferrer') }
   }, [triggerAction?.seq])
 
   const sentiment = article.sentiment && SENTIMENT_CONFIG[article.sentiment as keyof typeof SENTIMENT_CONFIG]
@@ -366,6 +369,26 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
           )}
           {/* bottom scrim so chips are legible */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+
+          {/* dismiss button */}
+          {onDismiss && (
+            <button
+              onClick={e => { e.stopPropagation(); onDismiss() }}
+              title="Not interested"
+              className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white/80 hover:bg-black/70 hover:text-white transition-all text-[9px] font-semibold"
+            >
+              <EyeOff className="w-2.5 h-2.5" />
+              Not interested
+            </button>
+          )}
+
+          {/* read indicator */}
+          {isRead && (
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/90 backdrop-blur-sm shadow-lg">
+              <Check className="w-2.5 h-2.5 text-white" />
+              <span className="text-[9px] font-bold text-white uppercase tracking-wide">Read</span>
+            </div>
+          )}
 
           {/* chips pinned to bottom of image */}
           <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
@@ -647,6 +670,7 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
             <Tooltip label="Read full article">
               <a
                 href={article.url} target="_blank" rel="noopener noreferrer"
+                onClick={() => onRead?.()}
                 className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-gradient-to-r ${catGrad} text-white hover:opacity-90 transition-opacity shadow-md whitespace-nowrap`}
               >
                 Read <ExternalLink className="w-3 h-3" />
