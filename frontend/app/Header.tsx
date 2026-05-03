@@ -56,6 +56,12 @@ export function Header() {
         Profile
       </Link>
       <Link
+        href="/developer"
+        className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-white/5"
+      >
+        API
+      </Link>
+      <Link
         href="/notifications"
         className="relative flex items-center justify-center w-9 h-9 rounded-xl hover:bg-white/50 dark:hover:bg-white/5 transition-colors"
       >

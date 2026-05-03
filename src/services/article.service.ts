@@ -1,4 +1,4 @@
-import { db } from '../db/client';
+import { db, rawClient } from '../db/client';
 import { articles, NewArticle } from '../db/schema';
 import { eq, desc, sql, and, or, like, ne, notInArray } from 'drizzle-orm';
 import { logger } from '../utils/logger';
@@ -145,6 +145,54 @@ class ArticleService {
       .where(eq(articles.id, articleId));
   }
 
+  async updateELI5Summary(articleId: string, eli5Summary: string) {
+    await db.update(articles)
+      .set({ eli5Summary })
+      .where(eq(articles.id, articleId));
+  }
+
+  async updateArticleEmbedding(articleId: string, embedding: number[]) {
+    const vectorJson = `[${embedding.join(',')}]`;
+    await rawClient.execute({
+      sql: `UPDATE articles SET embedding = vector(?) WHERE id = ?`,
+      args: [vectorJson, articleId],
+    });
+  }
+
+  async semanticSearch(embedding: number[], limit: number = 20): Promise<any[]> {
+    const vectorJson = `[${embedding.join(',')}]`;
+    const result = await rawClient.execute({
+      sql: `
+        SELECT a.id, a.title, a.content, a.hashtags, a.url, a.image_url,
+               a.published_at, a.bookmark_count, a.upvote_count, a.downvote_count,
+               a.sentiment, a.entities, a.category, a.why_it_matters,
+               a.questions, a.bias_label, a.bias_score
+        FROM vector_top_k('articles_embedding_idx', vector(?), ?) v
+        JOIN articles a ON a.rowid = v.id
+      `,
+      args: [vectorJson, limit],
+    });
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      hashtags: row.hashtags,
+      url: row.url,
+      imageUrl: row.image_url,
+      publishedAt: row.published_at,
+      bookmarkCount: row.bookmark_count ?? 0,
+      upvoteCount: row.upvote_count ?? 0,
+      downvoteCount: row.downvote_count ?? 0,
+      sentiment: row.sentiment,
+      entities: row.entities,
+      category: row.category,
+      whyItMatters: row.why_it_matters,
+      questions: row.questions,
+      biasLabel: row.bias_label,
+      biasScore: row.bias_score,
+    }));
+  }
+
   async getArticles(limit: number = 10, offset: number = 0, excludeIds: string[] = []) {
     const cols = {
       id: articles.id,
@@ -163,6 +211,7 @@ class ArticleService {
       questions: articles.questions,
       biasLabel: articles.biasLabel,
       biasScore: articles.biasScore,
+      eli5Summary: articles.eli5Summary,
     };
     if (excludeIds.length > 0) {
       return db.select(cols).from(articles)
@@ -242,6 +291,7 @@ class ArticleService {
         questions: articles.questions,
         biasLabel: articles.biasLabel,
         biasScore: articles.biasScore,
+        eli5Summary: articles.eli5Summary,
       })
       .from(articles)
       .limit(limit)
@@ -335,6 +385,7 @@ class ArticleService {
       questions: articles.questions,
       biasLabel: articles.biasLabel,
       biasScore: articles.biasScore,
+      eli5Summary: articles.eli5Summary,
     };
     const recencyCondition = sql`datetime(${articles.publishedAt}) > datetime('now', '-7 days')`;
     if (excludeIds.length > 0) {

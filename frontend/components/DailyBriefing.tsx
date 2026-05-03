@@ -2,7 +2,8 @@
 
 import { useState, useRef } from 'react'
 import { Play, Pause, SkipBack, SkipForward, GripHorizontal, ChevronDown, Headphones } from 'lucide-react'
-import { Article } from '@/lib/api'
+import { useAuth } from '@clerk/nextjs'
+import { Article, synthesizeSpeech } from '@/lib/api'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const
 type Speed = typeof SPEEDS[number]
@@ -13,28 +14,25 @@ interface DailyBriefingProps {
 
 export function DailyBriefing({ articles }: DailyBriefingProps) {
   const TOP = articles.slice(0, 5)
+  const { getToken } = useAuth()
 
-  const [minimized, setMinimized]        = useState(false)
-  const [isPlaying, setIsPlaying]        = useState(false)
-  const [currentIndex, setCurrentIndex]  = useState(0)
-  const [speed, setSpeed]                = useState<Speed>(1)
-  const [seekPct, setSeekPct]            = useState(0)
+  const [minimized, setMinimized]       = useState(false)
+  const [isPlaying, setIsPlaying]       = useState(false)
+  const [isLoading, setIsLoading]       = useState(false)
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [speed, setSpeed]               = useState<Speed>(1)
+  const [seekPct, setSeekPct]           = useState(0)
 
   const playerRef  = useRef<HTMLDivElement>(null)
   const seekBarRef = useRef<HTMLDivElement>(null)
   const dragRef    = useRef({ active: false, startMX: 0, startMY: 0, startEX: 0, startEY: 0 })
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
 
-  // playback refs
-  const indexRef       = useRef(0)
-  const speedRef       = useRef<Speed>(1)
-  const activeRef      = useRef(false)
-  const isPausedRef    = useRef(false)
-  const isPlayingRef   = useRef(false)
-  const fullTextRef    = useRef('')
-  const charOffsetRef  = useRef(0)
-  const seekPctRef     = useRef(0)  // mirrors seekPct state for use inside cycleSpeed
-  const keepAliveRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const audioRef    = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
+  const indexRef    = useRef(0)
+  const speedRef    = useRef<Speed>(1)
+  const activeRef   = useRef(false)
 
   if (TOP.length === 0) return null
 
@@ -45,178 +43,160 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
       : `Article ${idx + 1}: ${a.title}. ${a.content || ''}`
   }
 
-  const clearKeepAlive = () => {
-    if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null }
+  const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.onended = null
+      audioRef.current.onerror = null
+      audioRef.current.ontimeupdate = null
+      audioRef.current = null
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current)
+      audioUrlRef.current = null
+    }
+    if (utterRef.current) {
+      window.speechSynthesis.cancel()
+      utterRef.current = null
+    }
   }
 
-  const speakSegment = (text: string, charOffset: number, rate: Speed) => {
-    const u = new SpeechSynthesisUtterance(text)
-    u.rate   = rate
-    u.pitch  = 1
-    u.volume = 1
-    const voices = window.speechSynthesis.getVoices()
-    const voice = voices.find(v => v.lang.startsWith('en-') && !v.localService)
-      ?? voices.find(v => v.lang.startsWith('en'))
-      ?? voices[0]
-    if (voice) u.voice = voice
-
-    u.onstart = () => {
-      // Chrome pauses utterances after ~15s; call resume() every 10s to prevent that
-      clearKeepAlive()
-      keepAliveRef.current = setInterval(() => {
-        if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
-          window.speechSynthesis.resume()
-        }
-      }, 10000)
-    }
-
-    u.onboundary = (e) => {
-      if (e.name !== 'word') return
-      const abs = charOffset + e.charIndex
-      const pct = fullTextRef.current.length ? abs / fullTextRef.current.length : 0
-      seekPctRef.current = pct
-      setSeekPct(pct)
-    }
-
-    u.onend = () => {
-      clearKeepAlive()
-      if (!activeRef.current) return
-      const next = indexRef.current + 1
-      if (next >= TOP.length) {
-        activeRef.current    = false
-        isPlayingRef.current = false
-        setIsPlaying(false)
-        setCurrentIndex(0); indexRef.current = 0
-        seekPctRef.current = 0; setSeekPct(0)
-      } else {
-        indexRef.current = next
-        setCurrentIndex(next)
-        const t = buildText(next)
-        fullTextRef.current   = t
-        charOffsetRef.current = 0
-        seekPctRef.current = 0; setSeekPct(0)
-        speakSegment(t, 0, speedRef.current)
-      }
-    }
-
-    u.onerror = (e) => {
-      clearKeepAlive()
-      if (e.error === 'interrupted' || e.error === 'canceled') return
-      activeRef.current    = false
-      isPlayingRef.current = false
-      setIsPlaying(false)
-    }
-
-    window.speechSynthesis.speak(u)
-  }
-
-  // Wraps cancel() + delayed speak — Chrome silently fails if speak() follows cancel() immediately
-  const cancelThenSpeak = (text: string, charOffset: number, rate: Speed) => {
-    clearKeepAlive()
-    window.speechSynthesis.cancel()
-    setTimeout(() => {
-      window.speechSynthesis.resume()
-      const voices = window.speechSynthesis.getVoices()
-      if (voices.length > 0) {
-        speakSegment(text, charOffset, rate)
-      } else {
-        window.speechSynthesis.addEventListener('voiceschanged', () => speakSegment(text, charOffset, rate), { once: true })
-      }
-    }, 120)
-  }
-
-  const playFrom = (idx: number, rate: Speed = speedRef.current) => {
+  const fetchAndPlay = async (idx: number) => {
     if (idx < 0 || idx >= TOP.length) return
-    isPausedRef.current  = false
-    activeRef.current    = true
-    isPlayingRef.current = true
-    indexRef.current     = idx
+
+    stopAudio()
+    activeRef.current = true
+    indexRef.current  = idx
     setCurrentIndex(idx)
-    const t = buildText(idx)
-    fullTextRef.current   = t
-    charOffsetRef.current = 0
-    seekPctRef.current = 0; setSeekPct(0)
-    setIsPlaying(true)
-    cancelThenSpeak(t, 0, rate)
+    setSeekPct(0)
+    setIsLoading(true)
+    setIsPlaying(false)
+
+    try {
+      const token = await getToken()
+      if (!token || !activeRef.current) return
+      const blob = await synthesizeSpeech(buildText(idx), token)
+      if (!activeRef.current) { URL.revokeObjectURL(URL.createObjectURL(blob)); return }
+
+      const url = URL.createObjectURL(blob)
+      audioUrlRef.current = url
+
+      const audio = new Audio(url)
+      audio.playbackRate = speedRef.current
+      audioRef.current = audio
+
+      audio.ontimeupdate = () => {
+        if (audio.duration) setSeekPct(audio.currentTime / audio.duration)
+      }
+
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        audioUrlRef.current = null
+        audioRef.current = null
+        const next = indexRef.current + 1
+        if (next < TOP.length && activeRef.current) {
+          fetchAndPlay(next)
+        } else {
+          activeRef.current = false
+          setIsPlaying(false)
+          setCurrentIndex(0); indexRef.current = 0
+          setSeekPct(0)
+        }
+      }
+
+      audio.onerror = () => {
+        URL.revokeObjectURL(url)
+        audioUrlRef.current = null
+        audioRef.current = null
+        activeRef.current = false
+        setIsPlaying(false)
+      }
+
+      setIsLoading(false)
+      setIsPlaying(true)
+      audio.play()
+    } catch {
+      // ElevenLabs unavailable — fall back to browser SpeechSynthesis
+      if (!activeRef.current) return
+      const utter = new SpeechSynthesisUtterance(buildText(idx))
+      utter.rate = speedRef.current
+      utter.onend = () => {
+        utterRef.current = null
+        const next = indexRef.current + 1
+        if (next < TOP.length && activeRef.current) {
+          fetchAndPlay(next)
+        } else {
+          activeRef.current = false
+          setIsPlaying(false)
+          setCurrentIndex(0); indexRef.current = 0
+        }
+      }
+      utter.onerror = () => {
+        utterRef.current = null
+        activeRef.current = false
+        setIsPlaying(false)
+      }
+      utterRef.current = utter
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(utter)
+      setIsLoading(false)
+      setIsPlaying(true)
+    }
   }
 
   const stopAll = () => {
-    clearKeepAlive()
-    activeRef.current    = false
-    isPausedRef.current  = false
-    isPlayingRef.current = false
-    window.speechSynthesis.cancel()
+    activeRef.current = false
+    stopAudio()
+    setIsPlaying(false)
+    setIsLoading(false)
   }
 
   const handlePlayPause = () => {
-    if (isPlaying) {
-      // Cancel and remember position (Chrome pause() is unreliable)
-      clearKeepAlive()
-      window.speechSynthesis.cancel()
-      isPausedRef.current  = true
-      isPlayingRef.current = false
+    if (isLoading) return
+
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause()
       setIsPlaying(false)
-    } else if (isPausedRef.current) {
-      // Resume from saved seek position
-      const absChar   = Math.floor(seekPctRef.current * fullTextRef.current.length)
-      const remaining = fullTextRef.current.substring(absChar)
-      isPausedRef.current  = false
-      isPlayingRef.current = true
-      activeRef.current    = true
+    } else if (!isPlaying && audioRef.current) {
+      audioRef.current.play()
       setIsPlaying(true)
-      cancelThenSpeak(remaining, absChar, speedRef.current)
     } else {
-      isPausedRef.current = false
-      playFrom(currentIndex)
+      fetchAndPlay(currentIndex)
     }
   }
 
   const handlePrev = () => {
     const t = Math.max(0, currentIndex - 1)
-    if (isPlayingRef.current || isPausedRef.current) playFrom(t)
-    else { setCurrentIndex(t); indexRef.current = t; seekPctRef.current = 0; setSeekPct(0) }
-  }
-  const handleNext = () => {
-    const t = Math.min(TOP.length - 1, currentIndex + 1)
-    if (isPlayingRef.current || isPausedRef.current) playFrom(t)
-    else { setCurrentIndex(t); indexRef.current = t; seekPctRef.current = 0; setSeekPct(0) }
+    if (activeRef.current || audioRef.current) fetchAndPlay(t)
+    else { setCurrentIndex(t); indexRef.current = t; setSeekPct(0) }
   }
 
-  /* speed — applies immediately by restarting from current seek position */
+  const handleNext = () => {
+    const t = Math.min(TOP.length - 1, currentIndex + 1)
+    if (activeRef.current || audioRef.current) fetchAndPlay(t)
+    else { setCurrentIndex(t); indexRef.current = t; setSeekPct(0) }
+  }
+
   const cycleSpeed = () => {
     const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
     speedRef.current = next
     setSpeed(next)
-
-    if (isPlayingRef.current && fullTextRef.current) {
-      const absChar = Math.floor(seekPctRef.current * fullTextRef.current.length)
-      const remaining = fullTextRef.current.substring(absChar)
-      isPausedRef.current   = false
-      charOffsetRef.current = absChar
-      cancelThenSpeak(remaining, absChar, next)
+    if (audioRef.current) audioRef.current.playbackRate = next
+    if (utterRef.current) {
+      // browser TTS doesn't support live rate changes — restart current article at new speed
+      window.speechSynthesis.cancel()
+      fetchAndPlay(indexRef.current)
     }
   }
 
   const seekTo = (clientX: number) => {
-    if (!seekBarRef.current || !fullTextRef.current) return
-    const rect  = seekBarRef.current.getBoundingClientRect()
-    const pct   = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    const targetChar = Math.floor(fullTextRef.current.length * pct)
-    const remaining  = fullTextRef.current.substring(targetChar)
-    const wasActive  = isPlayingRef.current || isPausedRef.current
-
-    isPausedRef.current   = false
-    charOffsetRef.current = targetChar
-    seekPctRef.current = pct; setSeekPct(pct)
-
-    if (wasActive) {
-      activeRef.current    = true
-      isPlayingRef.current = true
-      setIsPlaying(true)
-      cancelThenSpeak(remaining, targetChar, speedRef.current)
-    } else {
-      window.speechSynthesis.cancel()
-    }
+    if (!seekBarRef.current || !audioRef.current || !audioRef.current.duration) return
+    const rect = seekBarRef.current.getBoundingClientRect()
+    const pct  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    audioRef.current.currentTime = audioRef.current.duration * pct
+    setSeekPct(pct)
   }
 
   const onSeekMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -244,7 +224,7 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
     document.addEventListener('mouseup', onUp)
   }
 
-  /* ── mini-player (when minimized) ── */
+  /* ── mini-player ── */
   if (minimized) {
     const miniStyle: React.CSSProperties = pos
       ? { position: 'fixed', left: pos.x, top: pos.y, right: 'auto', bottom: 'auto', zIndex: 200 }
@@ -253,8 +233,7 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
     return (
       <div style={miniStyle} className="select-none">
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-500 via-violet-600 to-purple-600 shadow-xl shadow-indigo-500/30">
-          {/* pulsing dot when playing */}
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isPlaying ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isPlaying ? 'bg-white animate-pulse' : isLoading ? 'bg-white/60 animate-pulse' : 'bg-white/40'}`} />
           <button
             onClick={() => setMinimized(false)}
             className="flex items-center gap-1.5 text-white"
@@ -267,12 +246,15 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); handlePlayPause() }}
-            className="p-1 rounded-full bg-white/20 hover:bg-white/35 text-white transition-colors"
+            disabled={isLoading}
+            className="p-1 rounded-full bg-white/20 hover:bg-white/35 text-white transition-colors disabled:opacity-50"
           >
-            {isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current ml-px" />}
+            {isLoading
+              ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+              : isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current ml-px" />}
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); stopAll(); setIsPlaying(false) }}
+            onClick={(e) => { e.stopPropagation(); stopAll() }}
             className="p-1 rounded text-white/50 hover:text-white transition-colors text-[10px] font-bold"
             title="Stop"
           >
@@ -340,8 +322,14 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
               <button onClick={handlePrev} disabled={currentIndex === 0} className="p-1.5 rounded-lg text-white disabled:opacity-25 hover:bg-white/15 transition-colors">
                 <SkipBack className="w-4 h-4 fill-current" />
               </button>
-              <button onClick={handlePlayPause} className="flex items-center justify-center w-9 h-9 rounded-full bg-white text-indigo-600 hover:scale-105 active:scale-95 transition-transform shadow-md shadow-black/20 mx-1">
-                {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+              <button
+                onClick={handlePlayPause}
+                disabled={isLoading}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-white text-indigo-600 hover:scale-105 active:scale-95 transition-transform shadow-md shadow-black/20 mx-1 disabled:opacity-70"
+              >
+                {isLoading
+                  ? <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin inline-block" />
+                  : isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
               </button>
               <button onClick={handleNext} disabled={currentIndex === TOP.length - 1} className="p-1.5 rounded-lg text-white disabled:opacity-25 hover:bg-white/15 transition-colors">
                 <SkipForward className="w-4 h-4 fill-current" />
@@ -352,7 +340,7 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
               {TOP.map((_, i) => (
                 <button
                   key={i}
-                  onClick={() => (isPlayingRef.current || isPausedRef.current) ? playFrom(i) : (setCurrentIndex(i), indexRef.current = i, seekPctRef.current = 0, setSeekPct(0))}
+                  onClick={() => (activeRef.current || audioRef.current) ? fetchAndPlay(i) : (setCurrentIndex(i), indexRef.current = i, setSeekPct(0))}
                   className={`rounded-full transition-all duration-300 ${i === currentIndex ? 'w-4 h-1.5 bg-white' : i < currentIndex ? 'w-1.5 h-1.5 bg-white/55' : 'w-1.5 h-1.5 bg-white/25'}`}
                 />
               ))}

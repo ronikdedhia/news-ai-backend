@@ -14,37 +14,82 @@ An AI-powered news aggregation platform built with Next.js 14, Clerk auth, and a
 | UI Primitives | shadcn/ui |
 | Icons | Lucide React |
 | Image capture | html2canvas + jsPDF |
-| TTS | Web Speech API |
+| TTS | ElevenLabs API (falls back to Web Speech API) |
+| Embeddings | `@huggingface/transformers` (all-MiniLM-L6-v2, local) |
+| Cache | Upstash Redis (REST API, graceful no-op if unconfigured) |
 
 ---
 
 ## Features (Shipped)
 
+### Feed & Discovery
 - **AI-curated feed** — Groq-summarised articles with sentiment badge and named-entity chips (amber = people, sky = companies, emerald = places)
-- **Glassmorphism UI** — Full-bleed image cards with frosted-glass content panels, animated ambient blobs, gradient borders per category
-- **Daily Briefing** — Floating draggable music player: play/pause (native resume), skip article, seek bar (word-level via `onboundary`), speed selector 0.75×–2×; minimises to a floating pill with pulse indicator
-- **Category filter** — 12 canonical categories with gradient pill chips; paywall for guest users
-- **Trending Hashtags** — Horizontal scrollable strip of top hashtags from last 48 h; click to filter feed; chevron arrows appear based on scroll position
-- **Full-text search** — Search by title or hashtags; last 10 queries stored in localStorage as clickable chips
+- **Category filter** — 12 canonical categories with gradient pill chips
+- **Trending Hashtags** — Horizontal scrollable strip of top hashtags from last 48 h; click to filter feed
+- **Personalized feed** — Weighted scoring: category × 3 + hashtag overlap × 2 + recency; signed-in only
+- **Infinite scroll** — Automatic page loading as user scrolls
+- **Source filter** — Filter feed by news source
+- **Dismiss articles** — Hide articles you don't want to see again
+- **Read indicator** — Visual marker on articles you've already opened
+
+### Search
+- **Keyword search** — Search by title or hashtags; last 10 queries stored in localStorage as clickable chips
+- **Semantic AI search** — Toggle to meaning-based search powered by local `all-MiniLM-L6-v2` embeddings + Turso `vector_top_k` ANN; no external API required
+
+### Article Detail
+- **Why It Matters** — Amber insight banner; Groq-generated 20-word impact sentence; fetched on-demand if not pre-generated
+- **AI Questions** — 2 Groq-generated Socratic Q&A pairs per article; expandable panel; fetches on-demand
+- **ELI5 Summary** — "Explain Like I'm 5" plain-language summary; Groq-generated; expandable
+- **Bias chip** — `Left-lean` / `Balanced` / `Right-lean` indicator on image overlay with confidence % tooltip
+- **Similar articles** — Hashtag-overlap based recommendations; signed-in only
+- **Threaded comments** — Post and reply to comments (1-level threading); delete own comments
+
+### Personalisation & Engagement
 - **Reactions** — Upvote / downvote per article with live counts; click again to undo
 - **Bookmarks** — Save / unsave; full bookmark list on Profile page; organise into named folders
+- **Text highlights** — Select any text to save in one of four colours (yellow, green, blue, pink); viewable and deletable per card
 - **Keyword alerts** — Up to 10 keywords; in-app notification bell with unread counter; `/notifications` page
-- **Similar articles** — Expand in-card similar article list (hashtag-overlap based)
-- **Threaded comments** — Post and reply to comments per article (1-level threading); delete own comments
-- **Text highlights** — Select any text in an article summary to save a highlight in one of four colours (yellow, green, blue, pink); viewable and deletable from the card
-- **Why It Matters** — Amber insight banner below article title; fetched on-demand via Groq if not pre-generated
-- **AI Questions** — Expandable Q&A panel per card (? button); 2 Socratic questions with short answers; fetches on-demand; indigo-accented answer style
-- **Bias chip** — `Left-lean` / `Balanced` / `Right-lean` indicator on image overlay with confidence % tooltip
-- **Share sheet** — html2canvas preview card + download PNG / copy / PDF / social links (X, Facebook, LinkedIn, WhatsApp, Telegram)
-- **Text-to-speech** per card via browser Web Speech API
-- **Shareable image card** — Branded preview card for social sharing
 - **Streak widget** — Gamification on Profile; 7-day and 30-day achievement badges
-- **Dashboard** — Admin metrics: article counts, sentiment breakdown, category breakdown, pipeline run history, top upvoted articles
-- **Keyboard shortcuts** — `j`/`k` navigate, `b` bookmark, `u` upvote, `d` downvote, `o`/Enter open, `/` search, `?` shortcut panel, `Esc` deselect
-- **Dark mode** — CSS variable palette, respects user preference set in Preferences
+- **Preferences** — First-run wizard + settings page: preferred categories, language, font size, theme, email digest frequency
+
+### Briefings & TTS
+- **Daily Briefing player** — Floating draggable music-player UI: play/pause, skip article, seek bar, speed selector 0.75×–2×; minimises to a floating pill with pulse indicator
+- **Per-card Listen** — Play any article aloud via the headphone button
+- **TTS backend** — ElevenLabs API (high-quality); automatically falls back to browser Web Speech API if ElevenLabs is unavailable
+- **Weekly Wrap** — AI-generated digest of the week's top stories; personalised by category
+
+### Sharing & Export
+- **Share sheet** — html2canvas preview card + download PNG / copy link / PDF / social links (X, Facebook, LinkedIn, WhatsApp, Telegram)
+- **Shareable image card** — Branded preview card optimised for social sharing
+
+### Caching (Upstash Redis)
+
+All caching is optional — if `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are not set, every cache call is a no-op and the app works normally.
+
+| Cache key | Route | TTL | Invalidated by |
+|-----------|-------|-----|----------------|
+| `cache:articles:free:{limit}:{offset}` | `GET /api/articles` (anon) | 5 min | Pipeline trigger |
+| `cache:trending:articles:{limit}:{offset}` | `GET /api/articles/trending` (anon) | 5 min | Pipeline trigger |
+| `cache:hashtags:{hours}` | `GET /api/trending-hashtags` | 10 min | Pipeline trigger |
+| `cache:stock:{tickers}:{limit}` | `GET /api/stock-news` | 15 min | Never (Alpha Vantage rate-limit buffer) |
+| `cache:personalized:{userId}` | `GET /api/articles/personalized` | 5 min | React, bookmark, pipeline trigger |
+| `cache:metrics` | `GET /api/metrics` | 5 min | Pipeline trigger |
+| `cache:weekly-wrap:{userId}` | `GET /api/auth/weekly-wrap` | 30 min | Manual (acceptable staleness) |
+| `cache:search:semantic:{query}:{limit}` | `GET /api/search?mode=semantic` | 5 min | Never (embeddings stable) |
+| `rate:{apiKeyId}:{date}` | `GET /api/v1/articles` | 24 h | Daily reset (TTL) |
+
+### Dashboard & Developer
+- **Admin dashboard** — Pipeline run history, article counts, sentiment & category breakdown, top upvoted articles; gate: admin email only
+- **Developer portal** — `/developer` page to generate and manage personal API keys with configurable daily rate limits
+- **Public API** — `GET /api/v1/articles` authenticated via API key; documented on the developer page
+
+### UX & Accessibility
+- **Glassmorphism UI** — Full-bleed image cards with frosted-glass content panels, animated ambient blobs, gradient borders per category
+- **Dark mode** — CSS variable palette, respects user preference
 - **Font size** — Small / Medium / Large via `data-font-size` attribute
-- **Offline mode** — Service worker + cached articles
-- **Infinite scroll**
+- **Keyboard shortcuts** — `j`/`k` navigate, `b` bookmark, `u` upvote, `d` downvote, `o`/Enter open, `/` search, `?` shortcut overlay, `Esc` deselect
+- **Offline mode** — Service worker + cached articles via PWA
+- **Catch-up brief** — Quick summary of what you missed since last visit
 
 ---
 
@@ -58,14 +103,15 @@ frontend/
 │   ├── Header.tsx              # Sticky glass header — logo, nav, bell badge
 │   ├── page.tsx                # Home → <NewsFeed />
 │   ├── dashboard/page.tsx      # Admin metrics dashboard
-│   ├── profile/page.tsx        # User profile, bookmarks, keyword alerts
+│   ├── developer/page.tsx      # API key management
+│   ├── profile/page.tsx        # User profile, bookmarks, keyword alerts, streak
 │   ├── notifications/page.tsx  # In-app notification list
-│   ├── search/page.tsx         # Article search
+│   ├── search/page.tsx         # Keyword + semantic search with mode toggle
 │   ├── sign-in/                # Clerk sign-in (split-screen layout)
 │   └── sign-up/                # Clerk sign-up (split-screen layout)
 ├── components/
 │   ├── NewsCard.tsx            # Glass card — full-bleed image + frosted panel
-│   ├── NewsFeed.tsx            # Feed container — infinite scroll, category filter, search
+│   ├── NewsFeed.tsx            # Feed container — infinite scroll, category filter, source filter
 │   ├── DailyBriefing.tsx       # Floating draggable TTS player
 │   ├── CategoryFilter.tsx      # Category pill chips
 │   ├── TrendingHashtags.tsx    # Horizontal scrollable hashtag strip
@@ -76,7 +122,7 @@ frontend/
 │   ├── PreferencesManager.tsx  # Edit preferences on Profile
 │   └── StreakWidget.tsx        # Reading streak gamification
 ├── lib/
-│   ├── api.ts                  # All API calls (articles, bookmarks, reactions, alerts, notifications)
+│   ├── api.ts                  # All API calls
 │   ├── categories.ts           # Canonical category list + color map
 │   └── useApiClient.ts         # Clerk token → Axios header injection
 └── public/
@@ -122,7 +168,7 @@ Each card is:
 1. **Gradient border wrapper** (1.5px, category colour)
 2. **Full-bleed image** behind everything
 3. **Dark gradient scrim** (transparent → 95% black bottom)
-4. **Frosted glass panel** (`backdrop-blur-2xl bg-black/45`) overlapping from the bottom — blurs the actual image behind it
+4. **Frosted glass panel** (`backdrop-blur-2xl bg-black/45`) overlapping from the bottom
 
 ### Primary palette
 | Token | Value |
@@ -133,65 +179,45 @@ Each card is:
 
 ---
 
-## Future Scope
-
-### 1. RAG-based Q&A / Chat with News
-Embed articles into a vector store (sqlite-vec or Pinecone free tier). Let users ask "What happened with RBI this week?" → retrieve top-k relevant articles → Groq answers with citations. Floating chat UI.
-
-### 2. Feed filter by bias
-Use the existing `bias_label` field to let users filter the feed to "Balanced only" or see a bias distribution chart. Needs a filter chip in the feed header and a backend query param.
-
-### 4. Smart Bookmark Collections
-Auto-organise bookmarks when user exceeds 5 saved articles — Groq clusters titles into named collections ("AI & Tech", "Market News"). Manual drag-drop to rearrange.
-
-### 5. Polls between cards
-Micro-poll cards injected at configurable feed positions ("Do you think X will happen?"). Needs `polls` + `poll_votes` DB tables and real-time vote tallying.
-
-### 6. Redis Caching (Upstash free tier)
-Cache `/api/articles`, `/api/articles/trending`, `/api/trending-hashtags` with 5-minute TTL.
-
-### 7. Stripe Paywall
-Replace current logged-in-equals-premium gate with proper Stripe subscription. Free: 10 articles; paid: everything. Webhook updates `is_premium`.
-
-### 8. Enhanced TTS (ElevenLabs / Google TTS)
-Replace browser SpeechSynthesis with proper TTS API. Generate one MP3 per day, cache, serve via URL for cross-device playback.
-
-### 9. Vector / Semantic Search
-Replace keyword search with embedding-based ANN. Candidates: Chroma (local), Qdrant (self-hosted), Pinecone (managed).
-
-### 10. Google AdSense
-AdSense banner slots between card rows (every 6 cards). Requires AdSense approval + `next/script` integration.
-
----
-
-## API Integration
+## API Reference
 
 Backend base URL: `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`)
 
-Key endpoints used by the frontend:
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/articles` | Paginated article feed |
-| GET | `/api/search` | Keyword search (rate-limited 15 req/min) |
-| POST | `/api/articles/:id/react` | Upvote / downvote |
-| GET | `/api/articles/:id/similar` | Similar articles |
-| GET/POST/DELETE | `/api/bookmarks` | Bookmark management |
-| GET/POST/DELETE | `/api/folders` | Bookmark folder management |
-| PUT | `/api/bookmarks/:id/folder` | Assign bookmark to folder |
-| GET/POST/DELETE | `/api/auth/alerts` | Keyword alerts |
-| GET | `/api/notifications` | In-app notifications |
-| GET | `/api/notifications/unread-count` | Unread badge count |
-| POST | `/api/notifications/read-all` | Mark all read |
-| GET | `/api/articles/:id/comments` | Get comments |
-| POST | `/api/articles/:id/comments` | Post comment or reply |
-| DELETE | `/api/articles/:id/comments/:commentId` | Delete own comment |
-| GET | `/api/articles/:id/highlights` | Get user highlights |
-| POST | `/api/articles/:id/highlights` | Save highlight |
-| DELETE | `/api/articles/:id/highlights/:highlightId` | Delete highlight |
-| GET | `/api/articles/:id/why-it-matters` | Get / generate why-it-matters |
-| GET | `/api/articles/:id/questions` | Get / generate 2 Socratic Q&A pairs |
-| GET | `/api/trending-hashtags` | Top hashtags (last N hours) |
-| GET | `/api/stock-news` | Alpha Vantage stock news |
-| GET | `/api/auth/me` | Current user profile |
-| GET | `/api/metrics` | Admin dashboard data |
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/articles` | optional | Paginated article feed |
+| GET | `/api/articles/trending` | optional | Trending articles |
+| GET | `/api/articles/personalized` | required | Personalised feed |
+| POST | `/api/articles/:id` | optional | Mark article as read |
+| POST | `/api/articles/:id/react` | required | Upvote / downvote |
+| GET | `/api/articles/:id/similar` | required | Similar articles (hashtag) |
+| GET | `/api/articles/:id/comments` | optional | Get comments |
+| POST | `/api/articles/:id/comments` | required | Post comment or reply |
+| DELETE | `/api/articles/:id/comments/:commentId` | required | Delete own comment |
+| GET | `/api/articles/:id/highlights` | required | Get user highlights |
+| POST | `/api/articles/:id/highlights` | required | Save highlight |
+| DELETE | `/api/articles/:id/highlights/:highlightId` | required | Delete highlight |
+| GET | `/api/articles/:id/why-it-matters` | optional | Get / generate why-it-matters |
+| GET | `/api/articles/:id/questions` | optional | Get / generate Socratic Q&A |
+| GET | `/api/articles/:id/eli5` | required | Get / generate ELI5 summary |
+| POST | `/api/articles/:id/dismiss` | required | Dismiss article from feed |
+| GET | `/api/search?q=&mode=keyword\|semantic` | required | Keyword or semantic search |
+| GET | `/api/trending-hashtags` | optional | Top hashtags (last 48 h) |
+| GET | `/api/stock-news` | optional | Alpha Vantage stock news |
+| GET/POST/DELETE | `/api/bookmarks` | required | Bookmark management |
+| GET/POST/DELETE | `/api/folders` | required | Bookmark folder management |
+| PUT | `/api/bookmarks/:id/folder` | required | Assign bookmark to folder |
+| GET/POST/DELETE | `/api/auth/alerts` | required | Keyword alerts |
+| GET | `/api/notifications` | required | In-app notifications |
+| GET | `/api/notifications/unread-count` | required | Unread badge count |
+| POST | `/api/notifications/read-all` | required | Mark all read |
+| GET | `/api/auth/me` | required | Current user profile |
+| GET | `/api/auth/streak` | required | Reading streak |
+| GET | `/api/auth/preferences` | required | User preferences |
+| PUT | `/api/auth/preferences` | required | Update preferences |
+| GET | `/api/auth/weekly-wrap` | required | Weekly AI digest |
+| GET | `/api/auth/catchup-brief` | required | Catch-up since last visit |
+| GET | `/api/metrics` | required (admin) | Dashboard analytics |
+| POST | `/api/tts` | required | ElevenLabs TTS → MP3 blob |
+| GET/POST/DELETE | `/api/developer/keys` | required | API key management |
+| GET | `/api/v1/articles` | API key | Public articles feed |

@@ -33,6 +33,10 @@ export const config = {
     accessToken: process.env.TELEGRAM_ACCESS_TOKEN || '',
     channelId: process.env.TELEGRAM_CHANNEL_ID || '',
   },
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY || '',
+    voice: process.env.ELEVENLABS_VOICE || '',
+  },
 };
 
 // Validate required environment variables

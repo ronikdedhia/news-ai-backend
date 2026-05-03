@@ -5,6 +5,7 @@ import { articleService } from './article.service';
 import { newsDataService } from './newsdata.service';
 import { alphaVantageService } from './alpha-vantage.service';
 import { groqService } from './groq.service';
+import { embedText } from './embedding.service';
 import { hashtagService } from './hashtag.service';
 import { telegramService } from './telegram.service';
 import { NewArticle } from '../db/schema';
@@ -23,6 +24,12 @@ async function analyzeAndAttach(articleId: string, title: string, content: strin
 
     const bias = await groqService.detectBias(title, content);
     if (bias.label) await articleService.updateArticleBias(articleId, bias.label, bias.score);
+
+    const eli5 = await groqService.generateELI5(title, content);
+    if (eli5) await articleService.updateELI5Summary(articleId, eli5);
+
+    const embedding = await embedText(`${title} ${content}`);
+    await articleService.updateArticleEmbedding(articleId, embedding);
   } catch (e: any) {
     logger.warn(`analyzeAndAttach skipped for ${articleId}: ${e.message}`);
   }

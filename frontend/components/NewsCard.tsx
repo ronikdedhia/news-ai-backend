@@ -7,9 +7,9 @@ import { useAuth } from '@clerk/nextjs'
 import {
   ExternalLink, Volume2, Square, Bookmark, ThumbsUp, ThumbsDown,
   ChevronDown, ChevronUp, User, Building2, MapPin,
-  TrendingUp, TrendingDown, Minus, MessageSquare, Lightbulb, Highlighter, Trash2, FolderOpen, Check, HelpCircle, EyeOff,
+  TrendingUp, TrendingDown, Minus, MessageSquare, Lightbulb, Highlighter, Trash2, FolderOpen, Check, HelpCircle, EyeOff, BookOpen,
 } from 'lucide-react'
-import { Article, Entity, SimilarArticle, Highlight, BookmarkFolder, addBookmark, removeBookmark, reactToArticle, getSimilarArticles, getHighlights, addHighlight, deleteHighlight, fetchWhyItMatters, fetchQuestions, getFolders, assignToFolder } from '@/lib/api'
+import { Article, Entity, SimilarArticle, Highlight, BookmarkFolder, addBookmark, removeBookmark, reactToArticle, getSimilarArticles, getHighlights, addHighlight, deleteHighlight, fetchWhyItMatters, fetchQuestions, fetchELI5, getFolders, assignToFolder, synthesizeSpeech } from '@/lib/api'
 import { ShareableImage } from '@/components/ShareableImage'
 import { CommentSection } from '@/components/CommentSection'
 import { CATEGORY_COLORS } from '@/lib/categories'
@@ -117,8 +117,10 @@ interface NewsCardProps {
 }
 
 export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, onActionDone, isRead, onRead, onDismiss }: NewsCardProps) {
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, getToken } = useAuth()
   const [isSpeaking, setIsSpeaking]     = useState(false)
+  const [ttsLoading, setTtsLoading]     = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isBookmarked, setIsBookmarked] = useState(article.isBookmarked || false)
   const [loadingBM, setLoadingBM]       = useState(false)
   const [userReaction, setUserReaction] = useState<'upvote' | 'downvote' | null>(article.userReaction ?? null)
@@ -150,6 +152,11 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
   const [showQuestions, setShowQuestions] = useState(false)
   const [loadingQA, setLoadingQA]         = useState(false)
 
+  // ELI5
+  const [eli5, setEli5]           = useState<string | null>(article.eli5Summary ?? null)
+  const [showELI5, setShowELI5]   = useState(false)
+  const [loadingELI5, setLoadingELI5] = useState(false)
+
   // Bookmark folder picker
   const [showFolderPicker, setShowFolderPicker]   = useState(false)
   const [folders, setFolders]                     = useState<BookmarkFolder[]>([])
@@ -165,34 +172,41 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
 
   const requireAuth = () => { window.location.href = '/sign-in' }
 
-  const handleSpeak = () => {
+  const handleSpeak = async () => {
     if (!isSignedIn) { requireAuth(); return }
-    if (isSpeaking) { window.speechSynthesis.cancel(); setIsSpeaking(false); return }
-    window.speechSynthesis.cancel()
-    setIsSpeaking(true)
 
-    const doSpeak = () => {
-      const u = new SpeechSynthesisUtterance(`${article.title}. ${article.content || ''}`)
-      u.rate = 1
-      const voices = window.speechSynthesis.getVoices()
-      const voice = voices.find(v => v.lang.startsWith('en-') && !v.localService)
-        ?? voices.find(v => v.lang.startsWith('en'))
-        ?? voices[0]
-      if (voice) u.voice = voice
-      u.onend = () => setIsSpeaking(false)
-      u.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled') setIsSpeaking(false) }
-      window.speechSynthesis.resume()
-      window.speechSynthesis.speak(u)
+    if (isSpeaking) {
+      audioRef.current?.pause()
+      if (audioRef.current) { audioRef.current.src = ''; audioRef.current = null }
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
     }
 
-    setTimeout(() => {
-      const voices = window.speechSynthesis.getVoices()
-      if (voices.length > 0) {
-        doSpeak()
-      } else {
-        window.speechSynthesis.addEventListener('voiceschanged', doSpeak, { once: true })
-      }
-    }, 120)
+    setTtsLoading(true)
+    try {
+      const token = await getToken()
+      if (!token) { requireAuth(); return }
+      const blob = await synthesizeSpeech(`${article.title}. ${article.content || ''}`, token)
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => { URL.revokeObjectURL(url); setIsSpeaking(false) }
+      audio.onerror = () => { URL.revokeObjectURL(url); setIsSpeaking(false) }
+      setIsSpeaking(true)
+      audio.play()
+    } catch {
+      // ElevenLabs unavailable — fall back to browser SpeechSynthesis
+      const text = `${article.title}. ${article.content || ''}`
+      const utter = new SpeechSynthesisUtterance(text)
+      utter.onend = () => setIsSpeaking(false)
+      utter.onerror = () => setIsSpeaking(false)
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(utter)
+      setIsSpeaking(true)
+    } finally {
+      setTtsLoading(false)
+    }
   }
 
   const handleBookmark = async () => {
@@ -234,6 +248,19 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
     const why = await fetchWhyItMatters(article.id)
     setWhyItMatters(why)
     setLoadingWhy(false)
+  }
+
+  const handleToggleELI5 = async () => {
+    if (!isSignedIn) { requireAuth(); return }
+    if (!showELI5 && eli5 === null) {
+      setShowELI5(true)
+      setLoadingELI5(true)
+      const result = await fetchELI5(article.id)
+      setEli5(result)
+      setLoadingELI5(false)
+      return
+    }
+    setShowELI5(v => !v)
   }
 
   const handleToggleQuestions = async () => {
@@ -562,8 +589,10 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
               </button>
             </Tooltip>
 
-            <GlassIconBtn onClick={handleSpeak} active={isSpeaking} title={isSpeaking ? 'Stop reading' : 'Listen aloud'}>
-              {isSpeaking ? <Square className="w-3.5 h-3.5 fill-current" /> : <Volume2 className="w-3.5 h-3.5" />}
+            <GlassIconBtn onClick={handleSpeak} active={isSpeaking} disabled={ttsLoading} title={isSpeaking ? 'Stop reading' : ttsLoading ? 'Loading…' : 'Listen aloud'}>
+              {ttsLoading
+                ? <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
+                : isSpeaking ? <Square className="w-3.5 h-3.5 fill-current" /> : <Volume2 className="w-3.5 h-3.5" />}
             </GlassIconBtn>
             <GlassIconBtn onClick={handleBookmark} active={isBookmarked} disabled={loadingBM} title={isBookmarked ? 'Remove bookmark' : 'Save article'}>
               <Bookmark className={`w-3.5 h-3.5 ${isBookmarked?'fill-current':''}`} />
@@ -663,6 +692,9 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
             <GlassIconBtn onClick={handleToggleQuestions} active={showQuestions} disabled={loadingQA} title="AI questions">
               <HelpCircle className="w-3.5 h-3.5" />
             </GlassIconBtn>
+            <GlassIconBtn onClick={handleToggleELI5} active={showELI5} disabled={loadingELI5} title="Simple mode (ELI5)">
+              <BookOpen className="w-3.5 h-3.5" />
+            </GlassIconBtn>
             <GlassIconBtn onClick={handleSimilar} title="Similar articles">
               {showSimilar ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </GlassIconBtn>
@@ -722,6 +754,20 @@ export function NewsCard({ article, onBookmarkChange, isFocused, triggerAction, 
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+          )}
+
+          {/* ELI5 panel */}
+          {showELI5 && (
+            <div className="pt-2 border-t border-border/60 space-y-2">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Simple Mode</p>
+              {loadingELI5 ? (
+                <p className="text-[11px] text-muted-foreground">Simplifying…</p>
+              ) : !eli5 ? (
+                <p className="text-[11px] text-muted-foreground">Could not generate a simple explanation.</p>
+              ) : (
+                <p className="text-[11px] text-foreground leading-relaxed pl-2 border-l-2 border-violet-400/40">{eli5}</p>
               )}
             </div>
           )}

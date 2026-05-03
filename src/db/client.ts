@@ -20,6 +20,8 @@ const client = createClient({
   authToken: authToken,
 });
 
+export const rawClient = client;
+
 // Initialize Drizzle ORM with schema
 export const db = drizzle(client, { schema });
 

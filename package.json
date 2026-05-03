@@ -8,17 +8,25 @@
     "start": "node dist/index.js",
     "test": "echo \"No tests yet\" && exit 0",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:reset": "tsx src/db/reset-migration.ts"
+    "db:reset": "tsx src/db/reset-migration.ts",
+    "embed:backfill": "tsx src/scripts/backfill-embeddings.ts"
   },
-  "keywords": ["news", "ai", "langchain", "summarization"],
+  "keywords": [
+    "news",
+    "ai",
+    "langchain",
+    "summarization"
+  ],
   "author": "Ronik Dedhia",
   "license": "ISC",
   "description": "AI-powered news aggregation and summarization platform",
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@libsql/client": "^0.17.0",
     "@sendgrid/mail": "^8.1.3",
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.6",
+    "@upstash/redis": "^1.37.0",
     "axios": "^1.13.2",
     "axios-retry": "^4.5.0",
     "compression": "^1.8.1",

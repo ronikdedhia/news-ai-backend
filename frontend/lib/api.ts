@@ -26,6 +26,7 @@ export interface Article {
   questions?: string | null   // JSON: [{q, a}]
   biasLabel?: 'left' | 'center' | 'right' | null
   biasScore?: number | null
+  eli5Summary?: string | null
   _rankReason?: {
     categoryMatch: boolean
     hashtagMatches: number
@@ -311,16 +312,22 @@ export const getUserBookmarks = async (limit: number = 20, offset: number = 0, f
   }
 }
 
-export const searchArticles = async (query: string, limit: number = 20, offset: number = 0): Promise<{ articles: Article[], count: number, query: string }> => {
+export const searchArticles = async (
+  query: string,
+  limit: number = 20,
+  offset: number = 0,
+  mode: 'keyword' | 'semantic' = 'keyword'
+): Promise<{ articles: Article[], count: number, query: string, mode: string }> => {
   try {
     const response = await apiClient.get('/api/search', {
-      params: { q: query, limit, offset }
+      params: { q: query, limit, offset, mode }
     })
     if (response.data.success) {
       return {
         articles: response.data.articles,
         count: response.data.count,
-        query: response.data.query
+        query: response.data.query,
+        mode: response.data.mode ?? 'keyword',
       }
     }
     throw new Error('Failed to search articles')
@@ -532,6 +539,41 @@ export const fetchQuestions = async (articleId: string): Promise<Array<{ q: stri
   } catch { return [] }
 }
 
+// ── ELI5 ─────────────────────────────────────────────────────────────────────
+
+export const fetchELI5 = async (articleId: string): Promise<string | null> => {
+  try {
+    const response = await apiClient.get(`/api/articles/${encodeURIComponent(articleId)}/eli5`)
+    return response.data.eli5Summary
+  } catch { return null }
+}
+
+// ── Developer API Keys ────────────────────────────────────────────────────────
+
+export interface ApiKey {
+  id: string
+  userId: string
+  key: string
+  name: string
+  dailyLimit: number
+  createdAt: string
+  lastUsedAt: string | null
+}
+
+export const getApiKeys = async (): Promise<ApiKey[]> => {
+  const response = await apiClient.get('/api/developer/keys')
+  return response.data.apiKeys
+}
+
+export const createApiKey = async (name?: string): Promise<ApiKey> => {
+  const response = await apiClient.post('/api/developer/keys', { name })
+  return response.data.apiKey
+}
+
+export const deleteApiKey = async (id: string): Promise<void> => {
+  await apiClient.delete(`/api/developer/keys/${id}`)
+}
+
 // ── Dismiss ───────────────────────────────────────────────────────────────────
 
 export const dismissArticle = async (articleId: string): Promise<void> => {
@@ -568,6 +610,19 @@ export interface CatchUpBriefResponse {
 export const getCatchUpBrief = async (): Promise<CatchUpBriefResponse> => {
   const response = await apiClient.get('/api/auth/catchup-brief')
   return response.data
+}
+
+export const synthesizeSpeech = async (text: string, token: string): Promise<Blob> => {
+  const response = await fetch(`${API_BASE_URL}/api/tts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ text }),
+  })
+  if (!response.ok) throw new Error(`TTS failed: ${response.status}`)
+  return response.blob()
 }
 
 export default apiClient

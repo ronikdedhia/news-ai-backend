@@ -390,6 +390,52 @@ async function runMigrations() {
       } else throw e;
     }
 
+    // Add eli5_summary column to articles
+    try {
+      await client.execute(`ALTER TABLE articles ADD COLUMN eli5_summary TEXT`);
+      logger.info('✅ Added eli5_summary column to articles');
+    } catch (e: any) {
+      if (e.message.includes('duplicate column')) {
+        logger.info('ℹ️  eli5_summary column already exists');
+      } else throw e;
+    }
+
+    // Create api_keys table
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        key TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL DEFAULT 'My API Key',
+        daily_limit INTEGER NOT NULL DEFAULT 1000,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TEXT
+      )
+    `);
+    logger.info('✅ Created api_keys table');
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`);
+
+    // Add embedding column for vector search (F32_BLOB, 384-dim from all-MiniLM-L6-v2)
+    try {
+      await client.execute(`ALTER TABLE articles ADD COLUMN embedding F32_BLOB(384)`);
+      logger.info('✅ Added embedding column to articles');
+    } catch (e: any) {
+      if (e.message.includes('duplicate column') || e.message.includes('already exists')) {
+        logger.info('ℹ️  embedding column already exists');
+      } else throw e;
+    }
+
+    // Create vector index for ANN search
+    try {
+      await client.execute(
+        `CREATE INDEX IF NOT EXISTS articles_embedding_idx ON articles(libsql_vector_idx(embedding))`
+      );
+      logger.info('✅ Created vector index on articles.embedding');
+    } catch (e: any) {
+      logger.warn('ℹ️  Vector index skipped (may not be supported on this Turso plan):', e.message);
+    }
+
     logger.info('✅ All migrations completed successfully!');
     process.exit(0);
   } catch (error: any) {

@@ -18,11 +18,14 @@ import { folderService } from './services/folder.service';
 import { highlightService } from './services/highlight.service';
 import { groqService } from './services/groq.service';
 import { initializeDatabase, db } from './db/client';
-import { users, articleReactions, articles as articlesTable, userPreferences, userDismissals, userBookmarks, userStreaks } from './db/schema';
+import { users, articleReactions, articles as articlesTable, userPreferences, userDismissals, userBookmarks, userStreaks, apiKeys } from './db/schema';
+import { getCached, setCached, deleteCached, incrWithExpire } from './lib/redis';
 import { eq, and, inArray, gte, sql as drizzleSql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { verifyClerkToken, optionalAuth } from './middleware/auth.middleware';
 import { alphaVantageService } from './services/alpha-vantage.service';
+import { ttsService } from './services/tts.service';
+import { embedText, warmupEmbedder } from './services/embedding.service';
 
 const app = express();
 
@@ -70,13 +73,16 @@ app.get('/api/stock-news', async (req: Request, res: Response) => {
       });
     }
 
+    // Alpha Vantage free = 25 req/day — always cache aggressively
+    const stockCacheKey = `cache:stock:${tickers.sort().join(',')}:${limit}`;
+    const cachedStock = await getCached<object>(stockCacheKey);
+    if (cachedStock) return res.json(cachedStock);
+
     const news = await alphaVantageService.fetchStockNews(tickers, limit);
 
-    res.json({
-      success: true,
-      count: news.length,
-      news,
-    });
+    const stockResponse = { success: true, count: news.length, news };
+    await setCached(stockCacheKey, stockResponse, 900); // 15 min
+    res.json(stockResponse);
   } catch (error: any) {
     logger.error('API Error:', error);
     res.status(500).json({
@@ -86,10 +92,11 @@ app.get('/api/stock-news', async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Search articles by title or hashtags
+// Endpoint: Search articles — keyword (default) or semantic (?mode=semantic)
 app.get('/api/search', optionalAuth, async (req: Request, res: Response) => {
   try {
     const query = (req.query.q as string)?.trim();
+    const mode = (req.query.mode as string) || 'keyword';
 
     if (!query || query.length < 2) {
       return res.status(400).json({
@@ -101,20 +108,32 @@ app.get('/api/search', optionalAuth, async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    // Search in title and hashtags
-    const articles = await articleService.searchArticles(query, limit, offset);
+    let articles: any[];
+    if (mode === 'semantic') {
+      const semanticCacheKey = `cache:search:semantic:${query.toLowerCase()}:${limit}`;
+      const cachedSemantic = await getCached<any[]>(semanticCacheKey);
+      if (cachedSemantic) {
+        articles = cachedSemantic;
+      } else {
+        const embedding = await embedText(query);
+        articles = await articleService.semanticSearch(embedding, limit);
+        await setCached(semanticCacheKey, articles, 300);
+      }
+    } else {
+      articles = await articleService.searchArticles(query, limit, offset);
+    }
 
     // Get bookmark status if user is authenticated
     let articlesWithBookmarks = articles;
     if (req.user) {
-      const articleIds = articles.map(a => a.id);
+      const articleIds = articles.map((a: any) => a.id);
       const bookmarkStatus = await bookmarkService.checkMultipleBookmarks(req.user.id, articleIds);
-      articlesWithBookmarks = articles.map(article => ({
+      articlesWithBookmarks = articles.map((article: any) => ({
         ...article,
         isBookmarked: bookmarkStatus[article.id] || false,
       }));
     } else {
-      articlesWithBookmarks = articles.map(article => ({
+      articlesWithBookmarks = articles.map((article: any) => ({
         ...article,
         isBookmarked: false,
       }));
@@ -123,6 +142,7 @@ app.get('/api/search', optionalAuth, async (req: Request, res: Response) => {
     res.json({
       success: true,
       query,
+      mode,
       count: articlesWithBookmarks.length,
       articles: articlesWithBookmarks,
     });
@@ -140,6 +160,13 @@ app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
   try {
     logger.info('📡 API: Manual pipeline trigger');
     await triggerNewsPipelineManually();
+    await deleteCached(
+      'cache:articles:free',
+      'cache:trending',
+      'cache:hashtags',
+      'cache:trending:articles:10:0',
+      'cache:metrics',
+    );
 
     res.json({
       success: true,
@@ -232,7 +259,7 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
 
     // Free tier (not logged in): only first 10 articles
     const FREE_TIER_LIMIT = 10;
-    
+
     if (offset >= FREE_TIER_LIMIT) {
       return res.status(403).json({
         success: false,
@@ -244,22 +271,28 @@ app.get('/api/articles', optionalAuth, async (req: Request, res: Response) => {
     // Calculate how many articles we can return
     const remainingArticles = FREE_TIER_LIMIT - offset;
     const articlesToFetch = Math.min(limit, remainingArticles);
-    
+
+    const cacheKey = `cache:articles:free:${articlesToFetch}:${offset}`;
+    const cached = await getCached<object>(cacheKey);
+    if (cached) return res.json(cached);
+
     const articles = await articleService.getArticles(articlesToFetch, offset);
-    
+
     // Add isBookmarked: false for unauthenticated users
     const articlesWithBookmarks = articles.map(article => ({
       ...article,
       isBookmarked: false,
     }));
 
-    return res.json({
+    const freeResponse = {
       success: true,
       count: articlesWithBookmarks.length,
       articles: articlesWithBookmarks,
       tier: 'free',
       totalAvailable: FREE_TIER_LIMIT,
-    });
+    };
+    await setCached(cacheKey, freeResponse, 300);
+    return res.json(freeResponse);
   } catch (error: any) {
     logger.error('API Error:', error);
     res.status(500).json({
@@ -290,7 +323,8 @@ app.post('/api/articles/:id', verifyClerkToken, async (req: Request, res: Respon
     }
 
     if (action === 'bookmark') {
-      const result = await bookmarkService.addBookmark(req.user.id, articleId);
+      await bookmarkService.addBookmark(req.user.id, articleId);
+      await deleteCached(`cache:personalized:${req.user.id}`);
       return res.json({
         success: true,
         action: 'bookmark',
@@ -299,6 +333,7 @@ app.post('/api/articles/:id', verifyClerkToken, async (req: Request, res: Respon
       });
     } else {
       await bookmarkService.removeBookmark(req.user.id, articleId);
+      await deleteCached(`cache:personalized:${req.user.id}`);
       return res.json({
         success: true,
         action: 'unbookmark',
@@ -420,23 +455,28 @@ app.get('/api/articles/trending', optionalAuth, async (req: Request, res: Respon
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = parseInt(req.query.offset as string) || 0;
 
+    // Cache unauthenticated trending (bookmark status is always false, safe to cache globally)
+    if (!req.user) {
+      const trendingCacheKey = `cache:trending:articles:${limit}:${offset}`;
+      const cachedTrending = await getCached<object>(trendingCacheKey);
+      if (cachedTrending) return res.json(cachedTrending);
+
+      const trendingArticles = await articleService.getTrendingArticles(limit, offset);
+      const articlesWithBookmarks = trendingArticles.map(a => ({ ...a, isBookmarked: false }));
+      const trendingResponse = { success: true, count: articlesWithBookmarks.length, articles: articlesWithBookmarks };
+      await setCached(trendingCacheKey, trendingResponse, 300);
+      return res.json(trendingResponse);
+    }
+
     const trendingArticles = await articleService.getTrendingArticles(limit, offset);
 
     // get bookmark status if user is authenticated
-    let articlesWithBookmarks = trendingArticles;
-    if (req.user) {
-      const articleIds = trendingArticles.map(a => a.id);
-      const bookmarkStatus = await bookmarkService.checkMultipleBookmarks(req.user.id, articleIds);
-      articlesWithBookmarks = trendingArticles.map(article => ({
-        ...article,
-        isBookmarked: bookmarkStatus[article.id] || false,
-      }));
-    } else {
-      articlesWithBookmarks = trendingArticles.map(article => ({
-        ...article,
-        isBookmarked: false,
-      }));
-    }
+    const articleIds = trendingArticles.map(a => a.id);
+    const bookmarkStatus = await bookmarkService.checkMultipleBookmarks(req.user.id, articleIds);
+    const articlesWithBookmarks = trendingArticles.map(article => ({
+      ...article,
+      isBookmarked: bookmarkStatus[article.id] || false,
+    }));
 
     res.json({
       success: true,
@@ -743,6 +783,7 @@ app.post('/api/articles/:id/react', verifyClerkToken, async (req: Request, res: 
     }
 
     const result = await reactionService.reactToArticle(req.user.id, articleId, type);
+    await deleteCached(`cache:personalized:${req.user.id}`);
     return res.json({ success: true, reaction: result.reaction });
   } catch (error: any) {
     logger.error('API Error:', error);
@@ -797,6 +838,10 @@ app.get('/api/articles/personalized', verifyClerkToken, async (req: Request, res
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
     const userId = req.user.id;
+
+    const personalizedCacheKey = `cache:personalized:${userId}`;
+    const cachedPersonalized = await getCached<object>(personalizedCacheKey);
+    if (cachedPersonalized) return res.json(cachedPersonalized);
 
     // 1. Get user's preferred categories
     const prefsRow = await db.select({ preferredCategories: userPreferences.preferredCategories })
@@ -869,7 +914,9 @@ app.get('/api/articles/personalized', verifyClerkToken, async (req: Request, res
       _rankReason,
     }));
 
-    return res.json({ success: true, count: result.length, articles: result });
+    const personalizedResult = { success: true, count: result.length, articles: result };
+    await setCached(`cache:personalized:${userId}`, personalizedResult, 300);
+    return res.json(personalizedResult);
   } catch (error: any) {
     logger.error('API Error:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -880,8 +927,12 @@ app.get('/api/articles/personalized', verifyClerkToken, async (req: Request, res
 app.get('/api/metrics', verifyClerkToken, async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const cachedMetrics = await getCached<object>('cache:metrics');
+    if (cachedMetrics) return res.json(cachedMetrics);
     const metrics = await metricsService.getDashboardMetrics();
-    return res.json({ success: true, metrics });
+    const metricsResponse = { success: true, metrics };
+    await setCached('cache:metrics', metricsResponse, 300);
+    return res.json(metricsResponse);
   } catch (error: any) {
     logger.error('API Error:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -965,6 +1016,11 @@ app.delete('/api/notifications/:id', verifyClerkToken, async (req: Request, res:
 app.get('/api/trending-hashtags', async (req: Request, res: Response) => {
   try {
     const hours = parseInt(req.query.hours as string) || 48;
+
+    const hashtagCacheKey = `cache:hashtags:${hours}`;
+    const cachedHashtags = await getCached<object>(hashtagCacheKey);
+    if (cachedHashtags) return res.json(cachedHashtags);
+
     const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
     const rows = await db
@@ -986,7 +1042,9 @@ app.get('/api/trending-hashtags', async (req: Request, res: Response) => {
       .slice(0, 20)
       .map(([tag, count]) => ({ tag, count }));
 
-    return res.json({ success: true, trending, hours });
+    const hashtagsResponse = { success: true, trending, hours };
+    await setCached(hashtagCacheKey, hashtagsResponse, 600);
+    return res.json(hashtagsResponse);
   } catch (error: any) {
     logger.error('API Error:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -1209,6 +1267,11 @@ app.get('/api/auth/weekly-wrap', verifyClerkToken, async (req: Request, res: Res
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const userId = req.user.id;
+
+    const wrapCacheKey = `cache:weekly-wrap:${userId}`;
+    const cachedWrap = await getCached<object>(wrapCacheKey);
+    if (cachedWrap) return res.json(cachedWrap);
+
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const [userRow, streakRow, reactionsThisWeek, bookmarksThisWeek] = await Promise.all([
@@ -1243,7 +1306,7 @@ app.get('/api/auth/weekly-wrap', verifyClerkToken, async (req: Request, res: Res
     }
     const topHashtag = Object.entries(tagCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
-    return res.json({
+    const wrapResponse = {
       success: true,
       wrap: {
         articlesViewed: userRow[0]?.articlesViewedCount || 0,
@@ -1254,7 +1317,9 @@ app.get('/api/auth/weekly-wrap', verifyClerkToken, async (req: Request, res: Res
         bookmarksThisWeek: Number(bookmarksThisWeek[0]?.count) || 0,
         firstName: userRow[0]?.firstName || null,
       },
-    });
+    };
+    await setCached(wrapCacheKey, wrapResponse, 1800); // 30 min
+    return res.json(wrapResponse);
   } catch (error: any) {
     logger.error('API Error:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -1320,6 +1385,166 @@ app.get('/api/auth/catchup-brief', verifyClerkToken, async (req: Request, res: R
   }
 });
 
+// ── ELI5 (Explain Like I'm 5) ─────────────────────────────────────────────────
+
+app.get('/api/articles/:id/eli5', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const row = await db
+      .select({ eli5Summary: articlesTable.eli5Summary, title: articlesTable.title, content: articlesTable.content })
+      .from(articlesTable)
+      .where(eq(articlesTable.id, req.params.id as string))
+      .limit(1);
+    if (!row.length) return res.status(404).json({ success: false, error: 'Article not found' });
+
+    if (row[0].eli5Summary) {
+      return res.json({ success: true, eli5Summary: row[0].eli5Summary });
+    }
+
+    const eli5 = await groqService.generateELI5(row[0].title, row[0].content || '');
+    if (eli5) {
+      await articleService.updateELI5Summary(req.params.id as string, eli5);
+    }
+    return res.json({ success: true, eli5Summary: eli5 || null });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ── Developer API Key Management ─────────────────────────────────────────────
+
+app.post('/api/developer/keys', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const existing = await db.select().from(apiKeys).where(eq(apiKeys.userId, req.user.id)).limit(1);
+    if (existing.length) {
+      return res.status(409).json({ success: false, error: 'API key already exists. Delete it first to create a new one.' });
+    }
+
+    const { randomUUID } = await import('crypto');
+    const key = `db_${randomUUID().replace(/-/g, '')}`;
+    const name = (req.body.name as string)?.trim().slice(0, 80) || 'My API Key';
+
+    const newKey = {
+      id: randomUUID(),
+      userId: req.user.id,
+      key,
+      name,
+      dailyLimit: 1000,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+    };
+
+    await db.insert(apiKeys).values(newKey);
+    return res.status(201).json({ success: true, apiKey: newKey });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/developer/keys', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const keys = await db.select().from(apiKeys).where(eq(apiKeys.userId, req.user.id));
+    return res.json({ success: true, apiKeys: keys });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/developer/keys/:id', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const keyId = req.params.id as string;
+    const existing = await db.select({ userId: apiKeys.userId }).from(apiKeys).where(eq(apiKeys.id, keyId)).limit(1);
+    if (!existing.length) return res.status(404).json({ success: false, error: 'Key not found' });
+    if (existing[0].userId !== req.user.id) return res.status(403).json({ success: false, error: 'Forbidden' });
+    await db.delete(apiKeys).where(eq(apiKeys.id, keyId));
+    return res.json({ success: true });
+  } catch (error: any) {
+    logger.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ── Public API v1 (API key auth) ──────────────────────────────────────────────
+
+app.get('/api/v1/articles', async (req: Request, res: Response) => {
+  try {
+    const key = req.headers['x-api-key'] as string;
+    if (!key) {
+      return res.status(401).json({ success: false, error: 'Missing X-API-Key header.' });
+    }
+
+    const keyRows = await db.select().from(apiKeys).where(eq(apiKeys.key, key)).limit(1);
+    if (!keyRows.length) {
+      return res.status(401).json({ success: false, error: 'Invalid API key.' });
+    }
+
+    const keyRecord = keyRows[0];
+
+    // Per-key daily rate limiting via Redis
+    const today = new Date().toISOString().split('T')[0];
+    const rateKey = `apikey:rate:${key}:${today}`;
+    const callCount = await incrWithExpire(rateKey, 86400);
+    if (callCount > keyRecord.dailyLimit) {
+      return res.status(429).json({
+        success: false,
+        error: `Daily limit of ${keyRecord.dailyLimit} requests exceeded. Resets at midnight UTC.`,
+        limit: keyRecord.dailyLimit,
+        used: callCount,
+      });
+    }
+
+    // Update lastUsedAt async
+    db.update(apiKeys).set({ lastUsedAt: new Date().toISOString() }).where(eq(apiKeys.key, key)).catch(() => {});
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const category = req.query.category as string | undefined;
+
+    let articlesList;
+    if (category) {
+      articlesList = await articleService.getArticlesByCategory(category, limit, offset);
+    } else {
+      articlesList = await articleService.getArticles(limit, offset);
+    }
+
+    return res.json({
+      success: true,
+      count: articlesList.length,
+      articles: articlesList,
+      rateLimit: { limit: keyRecord.dailyLimit, used: callCount, resetsAt: `${today}T23:59:59Z` },
+    });
+  } catch (error: any) {
+    logger.error('API v1 Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ── Text-to-Speech (ElevenLabs) ───────────────────────────────────────────────
+
+app.post('/api/tts', verifyClerkToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const { text } = req.body as { text?: string };
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'text is required' });
+    }
+    const audio = await ttsService.synthesize(text);
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Content-Length', String(audio.length));
+    res.send(audio);
+  } catch (error: any) {
+    logger.error('TTS Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({
@@ -1355,5 +1580,7 @@ const server = app.listen(PORT, async () => {
     // Initialize cron jobs only if database is ready
     initializeNewsPipeline();
     initializeNewsletterCron();
+    // Pre-load embedding model in background so first semantic search is fast
+    warmupEmbedder();
   }
 });

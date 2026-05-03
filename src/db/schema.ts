@@ -39,6 +39,7 @@ export const articles = sqliteTable(
     questions: text('questions'),     // JSON: [{q, a}]
     biasLabel: text('bias_label'),    // 'left' | 'center' | 'right'
     biasScore: integer('bias_score'), // confidence 0-100
+    eli5Summary: text('eli5_summary'),
   },
   (table) => ({
     urlIdx: index('articles_url_key').on(table.url),
@@ -241,3 +242,22 @@ export type UserDismissal = typeof userDismissals.$inferSelect;
 export type BookmarkFolder = typeof bookmarkFolders.$inferSelect;
 export type ArticleComment = typeof articleComments.$inferSelect;
 export type ArticleHighlight = typeof articleHighlights.$inferSelect;
+
+export const apiKeys = sqliteTable(
+  'api_keys',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    key: text('key').notNull().unique(),
+    name: text('name').notNull().default('My API Key'),
+    dailyLimit: integer('daily_limit').notNull().default(1000),
+    createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+    lastUsedAt: text('last_used_at'),
+  },
+  (table) => ({
+    keyIdx: index('api_keys_key_idx').on(table.key),
+    userIdIdx: index('api_keys_user_id_idx').on(table.userId),
+  })
+);
+
+export type ApiKey = typeof apiKeys.$inferSelect;

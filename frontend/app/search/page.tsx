@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
-import { X, Clock, Lock, ArrowLeft } from 'lucide-react'
+import { X, Clock, Lock, ArrowLeft, Sparkles, Hash } from 'lucide-react'
 import Link from 'next/link'
 import { NewsCard } from '@/components/NewsCard'
 import { Article, searchArticles } from '@/lib/api'
@@ -41,6 +41,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(query)
   const [history, setHistory] = useState<string[]>([])
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword')
 
   useEffect(() => {
     setHistory(getHistory())
@@ -67,7 +68,7 @@ export default function SearchPage() {
     setError(null)
     setArticles([])
     try {
-      const result = await searchArticles(q)
+      const result = await searchArticles(q, 20, 0, searchMode)
       setArticles(result.articles)
       if (result.count === 0) {
         setError(`No articles found for "${q}"`)
@@ -178,6 +179,37 @@ export default function SearchPage() {
           </form>
         </div>
 
+        {/* Search mode toggle */}
+        <div className="mb-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSearchMode('keyword')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition-colors ${
+              searchMode === 'keyword'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-input text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            <Hash className="w-3 h-3" />
+            Keyword
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchMode('semantic')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition-colors ${
+              searchMode === 'semantic'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-input text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            <Sparkles className="w-3 h-3" />
+            Semantic AI
+          </button>
+          {searchMode === 'semantic' && (
+            <span className="text-xs text-muted-foreground">Search by meaning, not just words</span>
+          )}
+        </div>
+
         {/* Search History Chips */}
         {history.length > 0 && (
           <div className="mb-6 flex flex-wrap gap-2 items-center">
@@ -201,7 +233,11 @@ export default function SearchPage() {
         {/* Results */}
         {loading && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">{searchQuery ? 'Searching...' : 'Loading articles...'}</p>
+            <p className="text-muted-foreground">
+            {searchQuery
+              ? searchMode === 'semantic' ? 'Searching by meaning...' : 'Searching...'
+              : 'Loading articles...'}
+          </p>
           </div>
         )}
 

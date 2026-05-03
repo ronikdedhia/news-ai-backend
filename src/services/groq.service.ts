@@ -272,6 +272,28 @@ Rules:
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async generateELI5(title: string, content: string): Promise<string> {
+    try {
+      const text = `${title}. ${content}`.slice(0, 700);
+      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: 'Explain this news to a 10-year-old in 2-3 simple sentences. Use everyday words, no jargon. Start directly with the explanation — no intro phrases like "Sure!" or "This article is about".',
+          },
+          { role: 'user', content: text },
+        ],
+        model: config.groq.model,
+        temperature: 0.3,
+        max_tokens: 120,
+      }));
+      return completion.choices[0]?.message?.content?.trim() || '';
+    } catch (error: any) {
+      logger.warn(`generateELI5 failed: ${error.message}`);
+      return '';
+    }
+  }
+
   async generateCatchUpBrief(headlines: string[]): Promise<string> {
     try {
       const list = headlines.map((h, i) => `${i + 1}. ${h}`).join('\n');
