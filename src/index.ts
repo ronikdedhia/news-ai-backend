@@ -31,7 +31,10 @@ const app = express();
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGIN || 'http://localhost:3001',
+  credentials: true,
+}));
 app.use(express.json());
 
 // Rate limiting
@@ -155,8 +158,12 @@ app.get('/api/search', optionalAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Main endpoint: Trigger news pipeline manually
+// Main endpoint: Trigger news pipeline manually (protected by PIPELINE_SECRET)
 app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
+  const secret = req.headers['x-pipeline-secret'] || req.body?.secret;
+  if (!process.env.PIPELINE_SECRET || secret !== process.env.PIPELINE_SECRET) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
   try {
     logger.info('📡 API: Manual pipeline trigger');
     await triggerNewsPipelineManually();
@@ -181,8 +188,12 @@ app.post('/api/trigger-pipeline', async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Trigger newsletter manually (for testing)
+// Endpoint: Trigger newsletter manually (protected by PIPELINE_SECRET)
 app.post('/api/trigger-newsletter', async (req: Request, res: Response) => {
+  const secret = req.headers['x-pipeline-secret'] || req.body?.secret;
+  if (!process.env.PIPELINE_SECRET || secret !== process.env.PIPELINE_SECRET) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
   try {
     logger.info('📡 API: Manual newsletter trigger');
     await triggerNewsletterManually();
@@ -991,7 +1002,7 @@ app.post('/api/notifications/read-all', verifyClerkToken, async (req: Request, r
 app.post('/api/notifications/:id/read', verifyClerkToken, async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    await alertService.markOneRead(req.user.id, req.params.id);
+    await alertService.markOneRead(req.user.id, req.params.id as string);
     return res.json({ success: true });
   } catch (error: any) {
     logger.error('API Error:', error);
@@ -1003,7 +1014,7 @@ app.post('/api/notifications/:id/read', verifyClerkToken, async (req: Request, r
 app.delete('/api/notifications/:id', verifyClerkToken, async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    await alertService.deleteNotification(req.user.id, req.params.id);
+    await alertService.deleteNotification(req.user.id, req.params.id as string);
     return res.json({ success: true });
   } catch (error: any) {
     logger.error('API Error:', error);

@@ -1,23 +1,17 @@
-# Use Node.js 20 Alpine image
-FROM node:20-alpine
-
-# Set working directory
+# Stage 1: build
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+RUN npm ci
 COPY . .
-
-# Build TypeScript
 RUN npm run build
 
-# Expose port
+# Stage 2: production
+FROM node:20-alpine AS production
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY --from=builder /app/dist ./dist
 EXPOSE 3000
-
-# Start application
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

@@ -88,3 +88,10 @@ export interface CronJobResult {
   articlesSaved: number;
   errors: string[];
 }
+
+export interface SummarizeResult {
+  success: boolean;
+  articlesProcessed: number;
+  summaries: Array<{ articleId: string; summary: string }>;
+  errors: Array<{ articleId: string; error: string }>;
+}

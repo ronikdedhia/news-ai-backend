@@ -13,7 +13,7 @@ class SummarizationAgent {
       for (const article of articles) {
         try {
           // Use content if available, otherwise use description or title
-          const textToSummarize = article.content || article.description || article.title;
+          const textToSummarize = article.content || article.title;
 
           if (!textToSummarize || textToSummarize.length < 50) {
             logger.warn(`Skipping article ${article.id}: Insufficient content`);

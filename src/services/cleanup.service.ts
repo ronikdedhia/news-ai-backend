@@ -16,7 +16,7 @@ class CleanupService {
 
       const result = await db
         .delete(articles)
-        .where(lt(articles.publishedAt, cutoffDate))
+        .where(lt(articles.publishedAt, cutoffDate.toISOString()))
         .returning({ id: articles.id });
 
       logger.info(`✅ Deleted ${result.length} articles`);
@@ -38,7 +38,7 @@ class CleanupService {
       const result = await db
         .select({ count: articles.id })
         .from(articles)
-        .where(lt(articles.publishedAt, cutoffDate));
+        .where(lt(articles.publishedAt, cutoffDate.toISOString()));
 
       return result.length;
     } catch (error: any) {
