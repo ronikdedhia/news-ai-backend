@@ -24,7 +24,7 @@ export function SessionRestorer() {
     const checkSession = async () => {
       try {
         // Trigger a session check
-        await clerk.client?.sessions?.getActive()
+        await clerk.session?.getToken()
       } catch (err) {
         // Silently fail - this is just a workaround
       }
