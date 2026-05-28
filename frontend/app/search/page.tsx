@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import { X, Clock, Lock, ArrowLeft, Sparkles, Hash } from 'lucide-react'
@@ -30,7 +30,7 @@ function removeFromHistory(query: string) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
 }
 
-export default function SearchPage() {
+function SearchContent() {
   const { isSignedIn, isLoaded } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -282,5 +282,13 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[60vh]"><p className="text-muted-foreground">Loading...</p></div>}>
+      <SearchContent />
+    </Suspense>
   )
 }
