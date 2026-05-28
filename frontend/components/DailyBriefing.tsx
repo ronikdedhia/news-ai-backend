@@ -33,6 +33,7 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
   const indexRef    = useRef(0)
   const speedRef    = useRef<Speed>(1)
   const activeRef   = useRef(false)
+  const utterRef    = useRef<SpeechSynthesisUtterance | null>(null)
 
   if (TOP.length === 0) return null
 
@@ -42,8 +43,6 @@ export function DailyBriefing({ articles }: DailyBriefingProps) {
       ? `Daily Briefing. ${TOP.length} articles. Article ${idx + 1}: ${a.title}. ${a.content || ''}`
       : `Article ${idx + 1}: ${a.title}. ${a.content || ''}`
   }
-
-  const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
 
   const stopAudio = () => {
     if (audioRef.current) {
