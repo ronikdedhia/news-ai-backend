@@ -2,7 +2,7 @@ import { db } from '../db/client';
 import { users, userPreferences, articles, userStreaks } from '../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../utils/logger';
-import { sendGridService } from './sendgrid.service';
+import { brevoService } from './brevo.service';
 import { articleService } from './article.service';
 
 interface NewsletterArticle {
@@ -234,7 +234,7 @@ class NewsletterService {
       const html = this.buildEmailTemplate(user.firstName || 'there', articlesList, stats);
 
       // Send email
-      const sent = await sendGridService.sendEmail({
+      const sent = await brevoService.sendEmail({
         to: user.email,
         subject: `📰 Your Daily News Digest - ${new Date().toLocaleDateString()}`,
         html,
