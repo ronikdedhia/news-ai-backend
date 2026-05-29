@@ -15,77 +15,77 @@ let lastCleanupDateAlphaVantage: Date | null = null;
  */
 export function initializeNewsPipeline() {
   // ===== NewsData Pipeline =====
-  // 12:00 AM (00:00) - NewsData
-  const newsDataMidnight = cron.schedule('0 0 * * *', async () => {
-    logger.info('⏰ Cron triggered: 12:00 AM NewsData pipeline');
+  // 12:00 AM IST = 18:30 UTC
+  const newsDataMidnight = cron.schedule('30 18 * * *', async () => {
+    logger.info('⏰ Cron triggered: 12:00 AM IST NewsData pipeline');
     await executeNewsDataJob();
   });
 
-  // 12:00 PM (12:00) - NewsData
-  const newsDataNoon = cron.schedule('0 12 * * *', async () => {
-    logger.info('⏰ Cron triggered: 12:00 PM NewsData pipeline');
+  // 12:00 PM IST = 06:30 UTC
+  const newsDataNoon = cron.schedule('30 6 * * *', async () => {
+    logger.info('⏰ Cron triggered: 12:00 PM IST NewsData pipeline');
     await executeNewsDataJob();
   });
 
   // ===== Alpha Vantage Pipeline =====
-  // 8:30 AM
-  const alphaVantage830am = cron.schedule('30 8 * * *', async () => {
-    logger.info('⏰ Cron triggered: 8:30 AM Alpha Vantage pipeline');
+  // 8:30 AM IST = 03:00 UTC
+  const alphaVantage830am = cron.schedule('0 3 * * *', async () => {
+    logger.info('⏰ Cron triggered: 8:30 AM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
-  // 10:30 AM
-  const alphaVantage1030am = cron.schedule('52 10 * * *', async () => {
-    logger.info('⏰ Cron triggered: 10:30 AM Alpha Vantage pipeline');
+  // 10:30 AM IST = 05:00 UTC
+  const alphaVantage1030am = cron.schedule('0 5 * * *', async () => {
+    logger.info('⏰ Cron triggered: 10:30 AM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
-  // 12:30 PM
-  const alphaVantage1230pm = cron.schedule('30 12 * * *', async () => {
-    logger.info('⏰ Cron triggered: 12:30 PM Alpha Vantage pipeline');
+  // 12:30 PM IST = 07:00 UTC
+  const alphaVantage1230pm = cron.schedule('0 7 * * *', async () => {
+    logger.info('⏰ Cron triggered: 12:30 PM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
-  // 2:30 PM
-  const alphaVantage230pm = cron.schedule('30 14 * * *', async () => {
-    logger.info('⏰ Cron triggered: 2:30 PM Alpha Vantage pipeline');
+  // 2:30 PM IST = 09:00 UTC
+  const alphaVantage230pm = cron.schedule('0 9 * * *', async () => {
+    logger.info('⏰ Cron triggered: 2:30 PM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
-  // 4:30 PM
-  const alphaVantage430pm = cron.schedule('30 16 * * *', async () => {
-    logger.info('⏰ Cron triggered: 4:30 PM Alpha Vantage pipeline');
+  // 4:30 PM IST = 11:00 UTC
+  const alphaVantage430pm = cron.schedule('0 11 * * *', async () => {
+    logger.info('⏰ Cron triggered: 4:30 PM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
-  // 6:30 PM
-  const alphaVantage630pm = cron.schedule('30 18 * * *', async () => {
-    logger.info('⏰ Cron triggered: 6:30 PM Alpha Vantage pipeline');
+  // 6:30 PM IST = 13:00 UTC
+  const alphaVantage630pm = cron.schedule('0 13 * * *', async () => {
+    logger.info('⏰ Cron triggered: 6:30 PM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
-  // 8:30 PM
-  const alphaVantage830pm = cron.schedule('30 20 * * *', async () => {
-    logger.info('⏰ Cron triggered: 8:30 PM Alpha Vantage pipeline');
+  // 8:30 PM IST = 15:00 UTC
+  const alphaVantage830pm = cron.schedule('0 15 * * *', async () => {
+    logger.info('⏰ Cron triggered: 8:30 PM IST Alpha Vantage pipeline');
     await executeAlphaVantageJob();
   });
 
   // ===== Cleanup Jobs =====
-  // 2:00 AM - NewsData Cleanup (runs daily but executes only if 15+ days passed)
-  const newsDataCleanup = cron.schedule('0 2 * * *', async () => {
+  // 2:00 AM IST = 20:30 UTC
+  const newsDataCleanup = cron.schedule('30 20 * * *', async () => {
     logger.info('⏰ Cron triggered: NewsData Cleanup check');
     await executeNewsDataCleanupJob();
   });
 
-  // 1:00 AM - Alpha Vantage Cleanup (runs daily but executes only if 15+ days passed)
-  const alphaVantageCleanup = cron.schedule('0 1 * * *', async () => {
+  // 1:00 AM IST = 19:30 UTC
+  const alphaVantageCleanup = cron.schedule('30 19 * * *', async () => {
     logger.info('⏰ Cron triggered: Alpha Vantage Cleanup check');
     await executeAlphaVantageCleanupJob();
   });
 
-  logger.info('✅ News pipeline cron jobs initialized');
-  logger.info('📅 NewsData: 12:00 AM and 12:00 PM daily, Cleanup at 2:00 AM');
-  logger.info('📅 Alpha Vantage: 8:30 AM, 10:30 AM, 12:30 PM, 2:30 PM, 4:30 PM, 6:30 PM, 8:30 PM daily, Cleanup at 1:00 AM');
+  logger.info('✅ News pipeline cron jobs initialized (all times UTC, converted from IST)');
+  logger.info('📅 NewsData: 18:30 UTC and 06:30 UTC daily, Cleanup at 20:30 UTC');
+  logger.info('📅 Alpha Vantage: 03:00, 05:00, 07:00, 09:00, 11:00, 13:00, 15:00 UTC daily, Cleanup at 19:30 UTC');
 
   return {
     newsDataMidnight,

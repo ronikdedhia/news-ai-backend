@@ -20,7 +20,7 @@ function getNewsletterCronExpression(timeString: string): string {
  * Sends daily newsletter at configured time (default: 8:00 AM)
  */
 export function initializeNewsletterCron() {
-  const sendTime = process.env.NEWSLETTER_SEND_TIME || '08:00';
+  const sendTime = process.env.NEWSLETTER_SEND_TIME || '02:30'; // 08:00 IST = 02:30 UTC
   const cronExpression = getNewsletterCronExpression(sendTime);
 
   const newsletterJob = cron.schedule(cronExpression, async () => {
