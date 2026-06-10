@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { StateGraph, START, END, Send } from '@langchain/langgraph';
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import { PipelineStateAnnotation, PipelineState, PipelineMetrics } from './state';
@@ -20,9 +21,9 @@ function routeAfterDedupe(state: PipelineState): string | Send[] {
   return state.newArticles.map(article => new Send('enrich_article', { currentArticle: article }));
 }
 
-// Persistent SQLite checkpointer — survives server restarts
-const checkpointDb = path.resolve(process.cwd(), 'checkpoints', 'pipeline.db');
-const checkpointer = SqliteSaver.fromConnString(checkpointDb);
+const checkpointDir = path.resolve('/tmp', 'checkpoints');
+fs.mkdirSync(checkpointDir, { recursive: true });
+const checkpointer = SqliteSaver.fromConnString(path.join(checkpointDir, 'pipeline.db'));
 
 export const newsPipelineGraph = new StateGraph(PipelineStateAnnotation)
   .addNode('start_run', startRunNode)
