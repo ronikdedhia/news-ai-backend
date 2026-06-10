@@ -50,3 +50,6 @@ docker-compose.override.yml
 # Temp files
 tmp/
 temp/
+
+# LangGraph checkpoint database
+checkpoints/

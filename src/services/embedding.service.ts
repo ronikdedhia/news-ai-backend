@@ -2,8 +2,11 @@ import axios from 'axios';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
+// sentence-transformers/all-MiniLM-L6-v2 dropped feature-extraction on the new HF router.
+// mxbai-embed-large-v1 is the replacement — verified feature-extraction, 1024-dim.
 const HF_MODEL_URL =
-  'https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2';
+  process.env.HF_INFERENCE_URL ||
+  'https://router.huggingface.co/hf-inference/models/mixedbread-ai/mxbai-embed-large-v1';
 
 export async function embedText(text: string): Promise<number[]> {
   const response = await axios.post<number[][]>(

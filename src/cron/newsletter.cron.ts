@@ -10,9 +10,19 @@ function getNewsletterCronExpression(timeString: string): string {
   const [hours, minutes] = timeString.split(':').map(Number);
   if (isNaN(hours) || isNaN(minutes)) {
     logger.warn(`Invalid time format: ${timeString}, using default 08:00`);
-    return '0 8 * * *'; // Default to 8 AM
+    return '0 8 * * *';
   }
   return `${minutes} ${hours} * * *`;
+}
+
+function utcToIST(utcTime: string): string {
+  const [h, m] = utcTime.split(':').map(Number);
+  const totalMins = (h * 60 + m + 330) % (24 * 60);
+  const istH = Math.floor(totalMins / 60);
+  const istM = totalMins % 60;
+  const period = istH >= 12 ? 'PM' : 'AM';
+  const h12 = istH === 0 ? 12 : istH > 12 ? istH - 12 : istH;
+  return `${h12}:${istM.toString().padStart(2, '0')} ${period} IST`;
 }
 
 /**
@@ -20,16 +30,16 @@ function getNewsletterCronExpression(timeString: string): string {
  * Sends daily newsletter at configured time (default: 8:00 AM)
  */
 export function initializeNewsletterCron() {
-  const sendTime = process.env.NEWSLETTER_SEND_TIME || '02:30'; // 08:00 IST = 02:30 UTC
+  const sendTime = process.env.NEWSLETTER_SEND_TIME || '06:30'; // 12:00 PM IST = 06:30 UTC
   const cronExpression = getNewsletterCronExpression(sendTime);
 
   const newsletterJob = cron.schedule(cronExpression, async () => {
-    logger.info(`⏰ Cron triggered: Daily newsletter at ${sendTime}`);
+    logger.info(`⏰ Cron triggered: Daily newsletter (${utcToIST(sendTime)})`);
     await executeNewsletterJob();
   });
 
   logger.info('✅ Newsletter cron job initialized');
-  logger.info(`📅 Schedule: Daily newsletter at ${sendTime}`);
+  logger.info(`📅 Newsletter: ${utcToIST(sendTime)} daily`);
 
   return { newsletterJob };
 }

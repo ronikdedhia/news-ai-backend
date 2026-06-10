@@ -1,10 +1,9 @@
 import { db } from '../db/client';
-import { userAlerts, articles, notifications } from '../db/schema';
-import { eq, and, desc, sql, lt } from 'drizzle-orm';
+import { userAlerts, notifications } from '../db/schema';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 
 const MAX_ALERTS_PER_USER = 10;
-const sentAlertKeys = new Set<string>();
 
 function sanitizeKeyword(raw: string): string {
   return raw
@@ -63,16 +62,6 @@ class AlertService {
       .where(and(eq(userAlerts.id, alertId), eq(userAlerts.userId, userId)));
   }
 
-  async checkRecentArticles() {
-    const recent = await db
-      .select({ id: articles.id, title: articles.title, url: articles.url })
-      .from(articles)
-      .where(sql`datetime(${articles.publishedAt}) > datetime('now', '-3 hours')`)
-      .limit(50);
-
-    await this.checkNewArticles(recent);
-  }
-
   async checkNewArticles(newArticles: Array<{ id: string; title: string; url: string }>) {
     if (newArticles.length === 0) return;
 
@@ -93,11 +82,20 @@ class AlertService {
       for (const alert of alerts) {
         const kw = alert.keyword.toLowerCase();
         for (const article of newArticles) {
-          const key = `${userId}:${article.id}:${alert.id}`;
-          if (sentAlertKeys.has(key)) continue;
           if (!article.title.toLowerCase().includes(kw)) continue;
 
-          sentAlertKeys.add(key);
+          // DB-level dedup — survives server restarts
+          const existing = await db
+            .select({ id: notifications.id })
+            .from(notifications)
+            .where(and(
+              eq(notifications.userId, userId),
+              eq(notifications.articleId, article.id),
+              eq(notifications.alertId, alert.id),
+            ))
+            .limit(1);
+          if (existing.length > 0) continue;
+
           await db.insert(notifications).values({
             id: crypto.randomUUID(),
             userId,

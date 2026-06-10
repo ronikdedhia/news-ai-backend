@@ -1,334 +1,46 @@
-import Groq from 'groq-sdk';
-import { config } from '../config';
-import { logger } from '../utils/logger';
-import { SummarizedTitleSchema, SummarizedContentSchema } from '../types';
+import { summarizeText as chainSummarizeText } from '../chains/summarize.chain';
+import { summarizeTitle as chainSummarizeTitle } from '../chains/title.chain';
+import { generateWhyItMatters as chainWhyItMatters } from '../chains/why-it-matters.chain';
+import { generateQuestions as chainQuestions } from '../chains/questions.chain';
+import { detectBias as chainDetectBias } from '../chains/bias.chain';
+import { generateELI5 as chainELI5 } from '../chains/eli5.chain';
+import { analyzeArticle as chainAnalyze } from '../chains/analyze.chain';
+import { generateCatchUpBrief as chainCatchUpBrief } from '../chains/catch-up-brief.chain';
 
 class GroqService {
-  private client: Groq;
-
-  constructor() {
-    this.client = new Groq({
-      apiKey: config.groq.apiKey,
-    });
+  async summarizeText(text: string, language = 'english'): Promise<string> {
+    return chainSummarizeText(text, language);
   }
 
-  async summarizeText(text: string, language: string = 'english'): Promise<string> {
-    try {
-      const truncatedText = text.slice(0, 1000);
-
-      const languagePrompts: Record<string, string> = {
-        hindi: 'आप एक पेशेवर समाचार सारांशकर्ता हैं। निम्नलिखित समाचार लेख का संक्षिप्त सारांश हिंदी में 50-70 शब्दों में बनाएं। केवल मुख्य तथ्य शामिल करें, कोई अनुमान नहीं।',
-        marathi: 'तुम्ही एक व्यावसायिक बातम्या सारांशकर्ता आहात। खालील बातमी लेखाचा संक्षिप्त सारांश मराठीत 50-70 शब्दांत तयार करा। केवळ मुख्य तथ्य समाविष्ट करा।',
-        gujarati: 'તમે એક વ્યાવસાયિક સમાચાર સારાંશકાર છો। નીચેના સમાચાર લેખનો સંક્ષિપ્ત સારાંશ ગુજરાતીમાં 50-70 શબ્દોમાં બનાવો। માત્ર મુખ્ય તથ્યો શામેલ કરો।',
-        tamil: 'நீங்கள் ஒரு தொழில்முறை செய்தி சுருக்கமாக்குபவர். பின்வரும் செய்தி கட்டுரையின் சுருக்கமான சுருக்கத்தை தமிழில் 50-70 வார்த்தைகளில் உருவாக்கவும். முக்கிய உண்மைகளை மட்டும் சேர்க்கவும்।',
-        spanish: 'Eres un resumidor profesional de noticias. Crea un resumen conciso del siguiente artículo en español en 50-70 palabras. Solo incluye hechos principales, sin inferencias.',
-        french: 'Vous êtes un résumeur professionnel d\'actualités. Créez un résumé concis de l\'article suivant en français en 50-70 mots. Incluez uniquement les faits principaux.',
-        german: 'Sie sind ein professioneller Nachrichtenzusammenfasser. Erstellen Sie eine prägnante Zusammenfassung des folgenden Artikels auf Deutsch in 50-70 Wörtern. Nur Hauptfakten, keine Schlussfolgerungen.',
-        english: 'You are a professional news summarizer. Create a concise summary of the following news article in 50-70 words. Include only main facts, no inferences or elaborations. IMPORTANT: Your response must be between 50-70 words exactly. Do not exceed 100 words under any circumstances.'
-      };
-
-      const systemPrompt = languagePrompts[language] || languagePrompts.english;
-
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: truncatedText,
-          },
-        ],
-        model: config.groq.model,
-        temperature: 0.1,
-        max_tokens: 100,
-        top_p: 1,
-      }));
-
-      const summary = completion.choices[0]?.message?.content?.trim() || '';
-      
-      // Validate against schema
-      const validated = SummarizedContentSchema.parse(summary);
-      return validated;
-    } catch (error: any) {
-      if (error.name === 'ZodError') {
-        logger.error(`❌ Summary validation failed: ${error.message}`);
-        throw new Error(`Summary does not meet constraints: ${error.errors[0]?.message}`);
-      }
-      throw new Error(`Failed to generate summary: ${error.message}`);
-    }
-  }
-
-  async summarizeTitle(text: string, language: string = 'english'): Promise<string> {
-    try {
-      const truncatedText = text.slice(0, 200);
-
-      const languagePrompts: Record<string, string> = {
-        hindi: 'कार्य: इनपुट शीर्षक को एक संक्षिप्त विषय लेबल में फिर से लिखें। नियम: - आउटपुट में केवल 3 या 4 शब्द होने चाहिए। - केवल शीर्षक में स्पष्ट रूप से मौजूद शब्दों का उपयोग करें। - जोड़ें, अनुमान लगाएं या पुनर्निर्माण न करें। - विराम चिह्न, व्याख्या या स्वरूपण न जोड़ें। केवल विषय लेबल आउटपुट करें।',
-        marathi: 'कार्य: इनपुट शीर्षक को एक संक्षिप्त विषय लेबल में पुन: लिखा करा। नियम: - आउटपुट मध्ये फक्त 3 किंवा 4 शब्द असावेत। - शीर्षकात स्पष्टपणे उपस्थित असलेले शब्द वापरा। - जोडू नका, अनुमान लगवू नका किंवा पुन: तयार करू नका। - विराम चिह्न, व्याख्या किंवा स्वरूपण जोडू नका। केवळ विषय लेबल आउटपुट करा।',
-        gujarati: 'કાર્ય: ઇનપુટ શીર્ષકને સંક્ષિપ્ત વિષય લેબલમાં ફરીથી લખો। નિયમો: - આઉટપુટમાં માત્ર 3 અથવા 4 શબ્દો હોવા જોઈએ। - શીર્ષકમાં સ્પષ્ટપણે હાજર શબ્દો જ વાપરો। - ઉમેરશો નહીં, અનુમાન કરશો નહીં અથવા પુનર્નિર્માણ કરશો નહીં। - વિરામચિહ્ન, સમજૂતી અથવા ફોર્મેટિંગ ઉમેરશો નહીં। માત્ર વિષય લેબલ આઉટપુટ કરો।',
-        tamil: 'பணி: உள்ளீட்டு தலைப்பை ஒரு சுருக்கமான தலைப்பு லேபிளாக மீண்டும் எழுதவும். விதிகள்: - வெளியீடு 3 அல்லது 4 சொற்களை மட்டுமே கொண்டிருக்க வேண்டும். - தலைப்பில் வெளிப்படையாக உள்ள சொற்களை மட்டுமே பயன்படுத்தவும். - சேர்க்க வேண்டாம், அனுமானம் செய்ய வேண்டாம் அல்லது மீண்டும் உருவாக்க வேண்டாம். - நிறுத்தற்குறி, விளக்கம் அல்லது வடிவமைப்பு சேர்க்க வேண்டாம். தலைப்பு லேபிளை மட்டுமே வெளியீடு செய்யவும்.',
-        spanish: 'Tarea: Reescribir el título de entrada en una etiqueta de tema concisa. Reglas: - La salida debe contener SOLO 3 o 4 palabras. - Utilice solo palabras explícitamente presentes en el título. - NO agregue, infiera ni reformule. - NO agregue puntuación, explicación ni formato. Genere solo la etiqueta de tema.',
-        french: 'Tâche: Réécrire le titre d\'entrée en une étiquette de sujet concise. Règles: - La sortie ne doit contenir QUE 3 ou 4 mots. - Utilisez uniquement les mots explicitement présents dans le titre. - N\'ajoutez pas, n\'inférez pas et ne reformulez pas. - N\'ajoutez pas de ponctuation, d\'explication ou de formatage. Générez uniquement l\'étiquette de sujet.',
-        german: 'Aufgabe: Schreiben Sie den Eingabetitel in ein prägnantes Thema-Label um. Regeln: - Die Ausgabe darf NUR 3 oder 4 Wörter enthalten. - Verwenden Sie nur Wörter, die explizit im Titel vorhanden sind. - Fügen Sie NICHT hinzu, schließen Sie NICHT und formulieren Sie NICHT um. - Fügen Sie KEINE Satzzeichen, Erklärung oder Formatierung hinzu. Geben Sie nur das Thema-Label aus.',
-        english: 'Task: Rewrite the input title into a concise topic label. Rules: - Output must contain ONLY 3 to 5 words maximum. - Use only words explicitly present in the title. - Do NOT add, infer, or rephrase. - Do NOT add punctuation, explanation, or formatting. Output only the topic label, nothing else.'
-      };
-
-      const systemPrompt = languagePrompts[language] || languagePrompts.english;
-
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: truncatedText,
-          },
-        ],
-        model: config.groq.model,
-        temperature: 0,
-        max_tokens: 15,
-        top_p: 1,
-      }));
-
-      const title = completion.choices[0]?.message?.content?.trim() || '';
-      
-      // Validate against schema
-      const validated = SummarizedTitleSchema.parse(title);
-      return validated;
-    } catch (error: any) {
-      if (error.name === 'ZodError') {
-        logger.error(`❌ Title validation failed: ${error.message}`);
-        throw new Error(`Title does not meet constraints: ${error.errors[0]?.message}`);
-      }
-      throw new Error(`Failed to generate title: ${error.message}`);
-    }
+  async summarizeTitle(text: string, language = 'english'): Promise<string> {
+    return chainSummarizeTitle(text, language);
   }
 
   async generateWhyItMatters(title: string, content: string): Promise<string> {
-    try {
-      const text = `${title}. ${content}`.slice(0, 600);
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a news analyst. In ONE sentence of at most 20 words, explain the real-world significance of this news. Start with the impact, not the event. No quotes, no preamble, no period at the end.',
-          },
-          { role: 'user', content: text },
-        ],
-        model: config.groq.model,
-        temperature: 0.2,
-        max_tokens: 40,
-      }));
-      return completion.choices[0]?.message?.content?.trim().replace(/\.$/, '') || '';
-    } catch (error: any) {
-      logger.warn(`generateWhyItMatters failed: ${error.message}`);
-      return '';
-    }
+    return chainWhyItMatters(title, content);
   }
 
   async generateQuestions(title: string, content: string): Promise<Array<{ q: string; a: string }>> {
-    try {
-      const text = `${title}. ${content}`.slice(0, 700);
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: `You are a news analyst. Given a news article, return ONLY valid JSON — no explanation, no markdown.
-Generate exactly 2 insightful Socratic questions a thoughtful reader would ask, each with a concise 1-sentence answer.
-Format: [{"q":"...","a":"..."},{"q":"...","a":"..."}]
-Rules:
-- Questions must be specific to THIS article (Why did X happen? Who benefits? What comes next?)
-- Answers max 20 words, factual, based only on the article
-- Do NOT use generic questions like "What is the main topic?"`,
-          },
-          { role: 'user', content: text },
-        ],
-        model: config.groq.model,
-        temperature: 0.2,
-        max_tokens: 200,
-      }));
-      const raw = completion.choices[0]?.message?.content?.trim() || '[]';
-      const match = raw.match(/\[[\s\S]*\]/);
-      if (!match) return [];
-      const parsed = JSON.parse(match[0]);
-      return Array.isArray(parsed)
-        ? parsed.filter((x: any) => typeof x?.q === 'string' && typeof x?.a === 'string').slice(0, 2)
-        : [];
-    } catch (error: any) {
-      logger.warn(`generateQuestions failed: ${error.message}`);
-      return [];
-    }
+    return chainQuestions(title, content);
   }
 
   async detectBias(title: string, content: string): Promise<{ label: string; score: number }> {
-    try {
-      const text = `${title}. ${content}`.slice(0, 700);
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: `You are a media bias analyst. Return ONLY valid JSON, no explanation.
-Analyze the news text for political framing bias. Return:
-{"label":"left"|"center"|"right","score":0-100}
-Rules:
-- label: overall political lean of the framing (not the topic itself)
-- score: your confidence in this assessment (0=uncertain, 100=very confident)
-- Use "center" when framing is neutral or balanced
-- Base only on language, framing, and emphasis — not the topic`,
-          },
-          { role: 'user', content: text },
-        ],
-        model: config.groq.model,
-        temperature: 0,
-        max_tokens: 40,
-      }));
-      const raw = completion.choices[0]?.message?.content?.trim() || '{}';
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (!match) return { label: 'center', score: 50 };
-      const parsed = JSON.parse(match[0]);
-      return {
-        label: ['left', 'center', 'right'].includes(parsed.label) ? parsed.label : 'center',
-        score: typeof parsed.score === 'number' ? Math.min(100, Math.max(0, parsed.score)) : 50,
-      };
-    } catch (error: any) {
-      logger.warn(`detectBias failed: ${error.message}`);
-      return { label: 'center', score: 50 };
-    }
+    return chainDetectBias(title, content);
   }
 
-  async summarizeBatch(texts: string[], language: string = 'english'): Promise<string[]> {
-    const summaries: string[] = [];
-
-    for (const text of texts) {
-      try {
-        const summary = await this.summarizeText(text, language);
-        summaries.push(summary);
-        
-        // Small delay to avoid rate limiting
-        await this.delay(100);
-      } catch (error: any) {
-        logger.error(`Failed to summarize text: ${error.message}`);
-        summaries.push('Summary generation failed');
-      }
-    }
-
-    return summaries;
+  async generateELI5(title: string, content: string): Promise<string> {
+    return chainELI5(title, content);
   }
 
   async analyzeArticle(title: string, content: string): Promise<{
     sentiment: 'positive' | 'neutral' | 'negative';
-    entities: Array<{ name: string; type: 'person' | 'company' | 'place' }>;
+    entities: Array<{ name: string; type: string }>;
   }> {
-    try {
-      const text = `${title}. ${content}`.slice(0, 800);
-
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: `You are a news analyst. Return ONLY valid JSON, no explanation, no markdown.
-Analyze the news text and return:
-{"sentiment":"positive"|"neutral"|"negative","entities":[{"name":"..","type":"person"|"company"|"place"}]}
-Rules:
-- sentiment: overall tone of the news
-- entities: max 5, only clearly mentioned real-world names
-- type "person" for people, "company" for organizations/brands, "place" for locations
-- if no entities found, return empty array`,
-          },
-          { role: 'user', content: text },
-        ],
-        model: config.groq.model,
-        temperature: 0,
-        max_tokens: 150,
-      }));
-
-      const raw = completion.choices[0]?.message?.content?.trim() || '{}';
-      // Extract JSON object — handles preamble text and markdown fences
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('No JSON object found in response');
-      const parsed = JSON.parse(match[0]);
-
-      return {
-        sentiment: ['positive', 'neutral', 'negative'].includes(parsed.sentiment)
-          ? parsed.sentiment
-          : 'neutral',
-        entities: Array.isArray(parsed.entities)
-          ? parsed.entities
-              .filter((e: any) => e?.name && ['person', 'company', 'place'].includes(e?.type))
-              .slice(0, 5)
-          : [],
-      };
-    } catch (error: any) {
-      logger.warn(`analyzeArticle failed, using defaults: ${error.message}`);
-      return { sentiment: 'neutral', entities: [] };
-    }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  async generateELI5(title: string, content: string): Promise<string> {
-    try {
-      const text = `${title}. ${content}`.slice(0, 700);
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: 'Explain this news to a 10-year-old in 2-3 simple sentences. Use everyday words, no jargon. Start directly with the explanation — no intro phrases like "Sure!" or "This article is about".',
-          },
-          { role: 'user', content: text },
-        ],
-        model: config.groq.model,
-        temperature: 0.3,
-        max_tokens: 120,
-      }));
-      return completion.choices[0]?.message?.content?.trim() || '';
-    } catch (error: any) {
-      logger.warn(`generateELI5 failed: ${error.message}`);
-      return '';
-    }
+    return chainAnalyze(title, content);
   }
 
   async generateCatchUpBrief(headlines: string[]): Promise<string> {
-    try {
-      const list = headlines.map((h, i) => `${i + 1}. ${h}`).join('\n');
-      const completion = await this.callWithRetry(() => this.client.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a news briefing assistant. Given a list of news headlines, write exactly 2 sentences that capture the most important stories. Be direct and informative. No filler phrases like "Here is" or "In summary". Start immediately with the news.',
-          },
-          { role: 'user', content: list },
-        ],
-        model: config.groq.model,
-        temperature: 0.2,
-        max_tokens: 120,
-      }));
-      return completion.choices[0]?.message?.content?.trim() || '';
-    } catch (error: any) {
-      logger.warn(`generateCatchUpBrief failed: ${error.message}`);
-      return '';
-    }
-  }
-
-  private async callWithRetry<T>(fn: () => Promise<T>, retries = 4, baseDelay = 2000): Promise<T> {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        return await fn();
-      } catch (error: any) {
-        const is429 = error.status === 429 || error.message?.includes('429') || error.message?.includes('rate_limit_exceeded');
-        if (!is429 || attempt === retries) throw error;
-        const wait = baseDelay * Math.pow(2, attempt);
-        logger.warn(`Groq rate limit hit, retrying in ${wait}ms (attempt ${attempt + 1}/${retries})`);
-        await this.delay(wait);
-      }
-    }
-    throw new Error('Unreachable');
+    return chainCatchUpBrief(headlines);
   }
 }
 

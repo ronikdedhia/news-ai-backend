@@ -1,12 +1,12 @@
 # Daily Bytes
 
-A full-stack AI-powered news aggregation and intelligence platform. Fetches news from multiple sources, runs it through an AI pipeline (summarization, sentiment analysis, named entity recognition, contextual insight generation), and delivers personalized content via a modern web app and daily email digest.
+A full-stack AI-powered news aggregation and intelligence platform. Fetches news from multiple sources, runs it through a LangGraph AI pipeline (summarization, sentiment analysis, named entity recognition, contextual insight generation), and delivers personalized content via a modern web app and daily email digest.
 
 ---
 
 ## Tech Stack
 
-**Backend:** Node.js · TypeScript · Express.js · Drizzle ORM · Turso (libSQL/SQLite) · Groq LLM · Hugging Face · ElevenLabs · Upstash Redis · SendGrid · Telegram Bot API · node-cron
+**Backend:** Node.js · TypeScript · Express.js · LangGraph · Drizzle ORM · Turso (libSQL/SQLite) · Groq LLM · Hugging Face · ElevenLabs · Brevo · Telegram Bot API · node-cron
 
 **Frontend:** Next.js 14 · React 18 · TypeScript · Tailwind CSS · shadcn/ui · Lucide Icons · Clerk Auth
 
@@ -14,7 +14,9 @@ A full-stack AI-powered news aggregation and intelligence platform. Fetches news
 
 ## Features
 
-### AI Pipeline
+### AI Pipeline (LangGraph)
+The news pipeline is a LangGraph state machine with discrete nodes: **fetch → deduplicate → analyze → embed → save → notify → finish**. Each node is independently retryable and observable.
+
 - **Dual Summarization** — Generates a 3-5 word title summary and a 50-70 word content summary per article using Groq LLM
 - **Multi-language Summarization** — English, Hindi, Marathi, Gujarati, Tamil, Spanish, French, German
 - **Sentiment Analysis** — Classifies each article as `positive`, `neutral`, or `negative` using a structured Groq prompt
@@ -24,14 +26,15 @@ A full-stack AI-powered news aggregation and intelligence platform. Fetches news
 - **ELI5 (Explain Like I'm 5)** — On-demand Groq-generated plain-language explanation per article; stored in `articles.eli5_summary` and cached after first generation; endpoint: `GET /api/articles/:id/eli5`
 - **Bias Detection** — Groq prompt scores each article's framing as `left` / `center` / `right` with a confidence score (0–100); stored as `articles.bias_label` + `articles.bias_score`; displayed as a subtle chip on the card
 - **Auto Hashtag Generation** — Generates relevant hashtags using Hugging Face
+- **Semantic Embeddings** — Each article embedded at save time via Hugging Face `mixedbread-ai/mxbai-embed-large-v1` (1024-dim); used for semantic search
 - **Schema Validation** — Zod validation ensures summaries meet word count and quality constraints
 - **Graceful Degradation** — Analysis failures are non-blocking; pipeline continues with defaults
 
 ### News Sources & Scheduling
 - **NewsData.io** — Fetches from 12 categories: technology, business, sports, entertainment, health, science, education, politics, world, nation, lifestyle, opinion
 - **Alpha Vantage** — Real-time stock market news (AAPL, MSFT, GOOGL, TSLA, AMZN)
-- **Cron Schedule** — NewsData at 12:00 AM & 12:00 PM; Alpha Vantage at 8:30 AM, 10:30 AM, 12:30 PM, 2:30 PM, 4:30 PM, 6:30 PM, 8:30 PM
-- **Auto Cleanup** — Removes articles older than 30 days every 15 days
+- **Cron Schedule** — NewsData at 2:00 PM IST daily; Alpha Vantage at 1:00 PM IST daily
+- **Auto Cleanup** — Removes articles older than 30 days every 15 days (runs at 6:00 PM IST)
 - **Duplicate Detection** — URL-based deduplication before insert
 
 ### Article Intelligence on Cards
@@ -89,21 +92,16 @@ Keyboard-driven navigation — active on the main feed, inactive when typing in 
 
 ### Search
 - **Full-text Search** — Default keyword search by title or hashtags (`?mode=keyword`)
-- **Semantic Search** — Vector search mode (`?mode=semantic`) using HuggingFace `all-MiniLM-L6-v2` sentence embeddings; query embedded at request time; results cached in Redis for 5 min
+- **Semantic Search** — Vector search mode (`?mode=semantic`) using Hugging Face `mixedbread-ai/mxbai-embed-large-v1` (1024-dim) embeddings; query embedded at request time
 - **Search History** — Last 10 queries stored in localStorage, shown as clickable chips; individual queries removable
 - **Tighter Rate Limit** — Search endpoint capped at 15 req/min (vs. 100/15 min for general API)
 
-### Keyword Alerts
-- **Custom Keyword Alerts** — Set up to 10 keywords; receive email when new articles match
+### Keyword Alerts & In-App Notifications
+- **Custom Keyword Alerts** — Set up to 10 keywords; in-app notification created when new articles match
 - **Input Sanitization** — HTML stripped, only alphanumeric/space/hyphen allowed, max 50 chars
-- **Smart Deduplication** — In-memory tracking prevents duplicate alert emails within a process run
+- **DB-level Deduplication** — Duplicate notification check against the database; survives server restarts
 - **Alert Management** — Add/delete keywords from the Profile → Alerts tab
-
-### In-App Notifications
-- Notification bell in header with unread count badge
-- Notifications generated when new articles match keyword alerts
-- Mark individual or all notifications as read; delete notifications
-- Dedicated `/notifications` page
+- **Notification Bell** — Unread count badge in header; mark individual or all as read; delete notifications; dedicated `/notifications` page
 
 ### Article Dismissal
 - **Dismiss Articles** — Remove individual articles from the feed permanently; dismissed articles are excluded from both the main feed and the personalized "For You" tab; stored in `user_dismissals` table; idempotent endpoint `POST /api/articles/:id/dismiss`
@@ -121,20 +119,14 @@ Keyboard-driven navigation — active on the main feed, inactive when typing in 
 - **Auto Reset** — Streak resets automatically if more than 1 day is missed
 
 ### Personalized Newsletter
-- **Daily Email Digest** — Sent via SendGrid, curated based on preferred categories
+- **Daily Email Digest** — Sent via Brevo, curated based on preferred categories (OR match across preferences)
 - **User Stats in Email** — Shows current streak 🔥, best streak 🏆, total articles read 📖
 - **Professional HTML Template** — Responsive, with images and category tags
-- **Frequency Control** — Daily / weekly / never
 - **One-click Unsubscribe** — Public endpoint, no login required
 
 ### Developer Portal (`/developer`)
 - **API Key Management** — Authenticated users can generate a personal API key (`db_<uuid>` format) with a 1,000 req/day default limit; one key per user; create, view, and delete from the `/developer` page
-- **Public API v1** — `GET /api/v1/articles` authenticated via `X-API-Key` header; supports `?limit`, `?offset`, `?category` query params; per-key daily rate limiting tracked in Redis; `rateLimit` object included in every response showing limit, used, and reset time
-
-### Caching (Upstash Redis)
-- **Distributed Redis Cache** — All hot endpoints cached in Upstash Redis via REST API; graceful fallback to no-cache if `UPSTASH_REDIS_REST_URL`/`TOKEN` not set
-- **Cache TTLs** — Articles (free): 5 min · Trending: 5 min · Hashtags: 10 min · Personalized: 5 min · Metrics: 5 min · Semantic search: 5 min · Stock news: 15 min · Weekly wrap: 30 min
-- **Cache Invalidation** — Personalized feed cache cleared on bookmark or reaction; pipeline trigger flushes articles/trending/hashtags/metrics caches
+- **Public API v1** — `GET /api/v1/articles` authenticated via `X-API-Key` header; supports `?limit`, `?offset`, `?category` query params; `rateLimit` object included in every response showing limit, used, and reset time
 
 ### Observability Dashboard (`/dashboard`)
 - **Stat Cards** — Total articles, users, upvotes, active alerts
@@ -170,7 +162,7 @@ Keyboard-driven navigation — active on the main feed, inactive when typing in 
 | Table | Purpose |
 |---|---|
 | `users` | Clerk user IDs, email, premium status, article view count |
-| `articles` | Title, content, hashtags, URL, image, category, sentiment, entities, `why_it_matters`, `questions`, `bias_label`, `bias_score`, `eli5_summary`, bookmark/upvote/downvote counts |
+| `articles` | Title, content, hashtags, URL, image, category, sentiment, entities, `why_it_matters`, `questions`, `bias_label`, `bias_score`, `eli5_summary`, `embedding`, bookmark/upvote/downvote counts |
 | `user_bookmarks` | User ↔ article bookmark mapping with optional `folder_id` |
 | `bookmark_folders` | Named bookmark collections per user |
 | `article_comments` | Threaded comments: `body`, `parent_id` (null = top-level) |
@@ -235,20 +227,20 @@ Keyboard-driven navigation — active on the main feed, inactive when typing in 
 | GET | `/api/v1/articles` | API Key | Public API — paginated articles with optional `?category` filter |
 | POST | `/api/tts` | Required | Synthesize article text to audio via ElevenLabs (returns `audio/mpeg`) |
 | POST | `/api/newsletter/unsubscribe` | None | Public unsubscribe |
-| POST | `/api/trigger-pipeline` | None | Manual pipeline trigger |
-| POST | `/api/trigger-newsletter` | None | Manual newsletter trigger |
+| POST | `/api/trigger-pipeline` | Secret | Manual pipeline trigger (`x-pipeline-secret` header) |
+| POST | `/api/trigger-newsletter` | Secret | Manual newsletter trigger (`x-pipeline-secret` header) |
 
 ---
 
 ## Scheduled Jobs
 
-| Time | Job |
+| Time (IST) | Job |
 |---|---|
-| 12:00 AM, 12:00 PM | NewsData pipeline (fetch → summarize → sentiment/NER/why-it-matters → save → Telegram) |
-| 8:30 AM – 8:30 PM (every 2h) | Alpha Vantage stock pipeline |
-| 2:00 AM | Article cleanup (if 15+ days since last run) |
-| 8:00 AM (configurable) | Daily newsletter to all subscribed users |
-| After each pipeline run | Keyword alert check against newly published articles |
+| 2:00 PM daily | NewsData pipeline (fetch → deduplicate → analyze → embed → save → Telegram) |
+| 1:00 PM daily | Alpha Vantage stock pipeline |
+| 6:00 PM daily | Article cleanup (if 15+ days since last run) |
+| 12:00 PM daily | Daily newsletter to all subscribed users (configurable via `NEWSLETTER_SEND_TIME`) |
+| After each pipeline run | Keyword alert check against newly saved articles |
 
 ---
 
@@ -274,8 +266,9 @@ DATABASE_URL=
 DATABASE_AUTH_TOKEN=
 GROQ_API_KEY=
 NEWSDATA_API_KEY=
-SENDGRID_API_KEY=
-SENDGRID_FROM_EMAIL=
+BREVO_API_KEY=
+BREVO_FROM_EMAIL=          # must be a verified sender in your Brevo account
+BREVO_FROM_NAME=Daily Bytes
 TELEGRAM_ACCESS_TOKEN=
 TELEGRAM_CHANNEL_ID=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
@@ -286,13 +279,13 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 ### Optional
 
 ```
-HUGGING_FACE_API_KEY=       # hashtag generation + semantic search embeddings
+HUGGING_FACE_API_KEY=       # semantic search embeddings + hashtag generation
 ALPHA_VANTAGE_API_KEY=      # stock news
-UPSTASH_REDIS_REST_URL=     # distributed caching (graceful no-op if absent)
-UPSTASH_REDIS_REST_TOKEN=   # distributed caching
 ELEVENLABS_API_KEY=         # server-side TTS (falls back to browser Web Speech API)
 ELEVENLABS_VOICE=           # voice name or ID (e.g. "Rachel" or a 20-char ID)
 PIPELINE_SECRET=            # guards /api/trigger-pipeline and /api/trigger-newsletter
+NEWSLETTER_SEND_TIME=06:30  # UTC time for daily newsletter (default 06:30 = 12:00 PM IST)
 NEWSLETTER_ARTICLES_COUNT=5
 GROQ_MODEL=llama-3.1-8b-instant
+MAX_ARTICLES_TO_FETCH=10
 ```

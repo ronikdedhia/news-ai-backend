@@ -2,7 +2,6 @@ import { db } from '../db/client';
 import { userBookmarks, articles } from '../db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import { logger } from '../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
 
 class BookmarkService {
   /**
@@ -21,7 +20,7 @@ class BookmarkService {
         return { success: true, bookmarkId: existing[0].id };
       }
 
-      const bookmarkId = uuidv4();
+      const bookmarkId = crypto.randomUUID();
       await db.insert(userBookmarks).values({
         id: bookmarkId,
         userId,

@@ -2,7 +2,6 @@ import { db } from '../db/client';
 import { userPreferences, NewUserPreference, UserPreference, users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from '../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface UserPreferencesData {
   preferredCategories: string[]; // Array of 3 categories
@@ -44,7 +43,7 @@ export class UserPreferencesService {
       }
 
       const newPreference: NewUserPreference = {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         userId,
         preferredCategories: JSON.stringify(preferences.preferredCategories),
         preferredLanguage: preferences.preferredLanguage,

@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { users, userPreferences, articles, userStreaks } from '../db/schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, or } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 import { brevoService } from './brevo.service';
 import { articleService } from './article.service';
@@ -49,10 +49,7 @@ class NewsletterService {
         })
         .from(articles)
         .where(
-          and(
-            // Match any of the preferred categories
-            ...categories.map((cat: string) => eq(articles.category, cat))
-          )
+          or(...categories.map((cat: string) => eq(articles.category, cat)))
         )
         .orderBy(desc(articles.publishedAt))
         .limit(limit);
@@ -108,21 +105,28 @@ class NewsletterService {
    * Build HTML email template
    */
   private buildEmailTemplate(userFirstName: string, articlesList: NewsletterArticle[], stats?: { currentStreak: number; longestStreak: number; articlesViewed: number }): string {
+    const now = new Date();
+    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+    const formattedDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
     const articlesHtml = articlesList
       .map(
         (article, index) => `
-      <div style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
-        <h3 style="margin: 0 0 10px 0; color: #1a1a1a; font-size: 18px; line-height: 1.4;">
-          ${index + 1}. ${article.title}
+      <div style="margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid #f0f0f0;">
+        ${article.imageUrl ? `<img src="${article.imageUrl}" alt="" style="width:100%;height:200px;object-fit:cover;border-radius:10px;margin-bottom:14px;display:block;">` : ''}
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:700;color:#8b5cf6;letter-spacing:1px;text-transform:uppercase;">${index + 1 < 10 ? '0' + (index + 1) : index + 1}</span>
+          ${article.category ? `<span style="font-size:11px;font-weight:600;color:#fff;background:linear-gradient(135deg,#667eea,#764ba2);padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:0.5px;">${this.toSentenceCase(article.category)}</span>` : ''}
+        </div>
+        <h3 style="margin:0 0 10px 0;color:#0d1117;font-size:19px;font-weight:700;line-height:1.4;">
+          ${article.title}
         </h3>
-        ${article.imageUrl ? `<img src="${article.imageUrl}" alt="Article image" style="max-width: 100%; height: auto; margin: 15px 0; border-radius: 8px;">` : ''}
-        <p style="margin: 10px 0; color: #666; font-size: 14px; line-height: 1.6;">
-          ${article.content ? article.content : 'No preview available'}
+        <p style="margin:0 0 14px 0;color:#57606a;font-size:14px;line-height:1.7;">
+          ${article.content ? article.content : 'No preview available.'}
         </p>
-        <a href="${article.url}" style="display: inline-block; margin-top: 10px; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-size: 14px;">
-          Read Full Article →
+        <a href="${article.url}" style="display:inline-block;padding:9px 20px;background:#0d1117;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600;letter-spacing:0.3px;">
+          Read full story →
         </a>
-        ${article.category ? `<span style="display: inline-block; margin-left: 10px; padding: 5px 10px; background-color: #f0f0f0; color: #666; border-radius: 3px; font-size: 12px;">${this.toSentenceCase(article.category)}</span>` : ''}
       </div>
     `
       )
@@ -134,72 +138,62 @@ class NewsletterService {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 8px; text-align: center; margin-bottom: 30px; }
-          .header h1 { margin: 0; font-size: 28px; }
-          .header p { margin: 10px 0 0 0; font-size: 14px; opacity: 0.9; }
-          .content { background: white; }
-          .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; font-size: 12px; color: #999; }
-          a { color: #007bff; text-decoration: none; }
-          a:hover { text-decoration: underline; }
-        </style>
       </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>📰 Your Daily News Digest</h1>
-            <p>Curated just for you, ${userFirstName}</p>
+      <body style="margin:0;padding:0;background:#f6f8fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+        <div style="max-width:600px;margin:32px auto;padding:0 16px 40px;">
+
+          <!-- Masthead -->
+          <div style="background:#0d1117;border-radius:14px 14px 0 0;padding:36px 32px 24px;text-align:center;">
+            <div style="font-size:11px;letter-spacing:5px;color:#8b949e;text-transform:uppercase;margin-bottom:14px;">AI-Powered News Intelligence</div>
+            <div style="font-size:46px;font-weight:900;color:#ffffff;letter-spacing:-1.5px;line-height:1;font-family:Georgia,serif;">Daily Bytes</div>
+            <div style="height:2px;background:linear-gradient(90deg,transparent,#667eea,#764ba2,#667eea,transparent);margin:18px auto;max-width:280px;"></div>
+            <div style="font-size:18px;color:#c9d1d9;font-style:italic;margin-bottom:6px;">${dayName}'s Intelligence Brief</div>
+            <div style="font-size:12px;color:#8b949e;">${formattedDate} &nbsp;·&nbsp; Curated for ${userFirstName}</div>
           </div>
-          
-          <div class="content">
-            <p style="font-size: 16px; margin-bottom: 20px;">
-              Hi ${userFirstName},
-            </p>
-            <p style="color: #666; margin-bottom: 20px;">
-              Here are today's top stories tailored to your interests. Click on any article to read the full story.
-            </p>
+
+          <!-- Accent bar -->
+          <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);height:5px;margin-bottom:28px;border-radius:0 0 4px 4px;"></div>
+
+          <!-- Body -->
+          <div style="background:#ffffff;border-radius:12px;padding:28px 32px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+
+            <p style="font-size:16px;color:#24292f;margin:0 0 6px 0;">Hi <strong>${userFirstName}</strong>,</p>
+            <p style="color:#57606a;font-size:14px;margin:0 0 24px 0;">Here are today's top stories curated to your interests. Click any article to read the full story.</p>
 
             ${stats ? `
             <div style="display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap;">
-              <div style="flex:1;min-width:120px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:8px;padding:14px;text-align:center;">
-                <div style="font-size:24px;">🔥</div>
-                <div style="font-size:22px;font-weight:700;color:#667eea;">${stats.currentStreak}</div>
-                <div style="font-size:12px;color:#888;">day streak</div>
+              <div style="flex:1;min-width:110px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:22px;margin-bottom:4px;">🔥</div>
+                <div style="font-size:24px;font-weight:800;color:#667eea;line-height:1;">${stats.currentStreak}</div>
+                <div style="font-size:11px;color:#8b949e;margin-top:3px;text-transform:uppercase;letter-spacing:0.5px;">day streak</div>
               </div>
-              <div style="flex:1;min-width:120px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:8px;padding:14px;text-align:center;">
-                <div style="font-size:24px;">🏆</div>
-                <div style="font-size:22px;font-weight:700;color:#667eea;">${stats.longestStreak}</div>
-                <div style="font-size:12px;color:#888;">best streak</div>
+              <div style="flex:1;min-width:110px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:22px;margin-bottom:4px;">🏆</div>
+                <div style="font-size:24px;font-weight:800;color:#667eea;line-height:1;">${stats.longestStreak}</div>
+                <div style="font-size:11px;color:#8b949e;margin-top:3px;text-transform:uppercase;letter-spacing:0.5px;">best streak</div>
               </div>
-              <div style="flex:1;min-width:120px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:8px;padding:14px;text-align:center;">
-                <div style="font-size:24px;">📖</div>
-                <div style="font-size:22px;font-weight:700;color:#667eea;">${stats.articlesViewed}</div>
-                <div style="font-size:12px;color:#888;">articles read</div>
+              <div style="flex:1;min-width:110px;background:#f9f9ff;border:1px solid #e0e0ff;border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:22px;margin-bottom:4px;">📖</div>
+                <div style="font-size:24px;font-weight:800;color:#667eea;line-height:1;">${stats.articlesViewed}</div>
+                <div style="font-size:11px;color:#8b949e;margin-top:3px;text-transform:uppercase;letter-spacing:0.5px;">articles read</div>
               </div>
             </div>` : ''}
 
+            <div style="height:1px;background:#f0f0f0;margin-bottom:28px;"></div>
+
             ${articlesHtml}
-            
-            <!-- Commented out - website not deployed yet
-            <div style="margin-top: 40px; padding: 20px; background-color: #f9f9f9; border-radius: 8px; text-align: center;">
-              <p style="margin: 0; color: #666; font-size: 14px;">
-                <a href="${process.env.FRONTEND_URL || 'https://newsai.com'}" style="color: #007bff; text-decoration: none;">
-                  View all articles on NewsAI →
-                </a>
-              </p>
-            </div>
-            -->
           </div>
-          
-          <div class="footer">
-            <p>You're receiving this because you subscribed to the Daily Bytes AI newsletter.</p>
-            <p>
-              <a href="${process.env.FRONTEND_URL || 'https://newsai.com'}/newsletter-preferences" style="color: #999;">Manage preferences</a> | 
-              <a href="${process.env.FRONTEND_URL || 'https://newsai.com'}/unsubscribe" style="color: #999;">Unsubscribe</a>
+
+          <!-- Footer -->
+          <div style="text-align:center;margin-top:24px;font-size:12px;color:#8b949e;line-height:1.8;">
+            <p style="margin:0 0 4px 0;">You're receiving this because you subscribed to <strong>Daily Bytes</strong>.</p>
+            <p style="margin:0;">
+              <a href="${process.env.FRONTEND_URL || '#'}/newsletter-preferences" style="color:#8b949e;">Manage preferences</a>
+              &nbsp;·&nbsp;
+              <a href="${process.env.FRONTEND_URL || '#'}/unsubscribe" style="color:#8b949e;">Unsubscribe</a>
             </p>
           </div>
+
         </div>
       </body>
     </html>
@@ -236,7 +230,7 @@ class NewsletterService {
       // Send email
       const sent = await brevoService.sendEmail({
         to: user.email,
-        subject: `📰 Your Daily News Digest - ${new Date().toLocaleDateString()}`,
+        subject: `☀️ Your ${new Date().toLocaleDateString('en-US', { weekday: 'long' })} Brief is here — Daily Bytes`,
         html,
       });
 

@@ -1,7 +1,6 @@
 import { db } from '../db/client';
 import { userStreaks } from '../db/schema';
 import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 export class StreakService {
   async getOrCreateStreak(userId: string) {
@@ -9,7 +8,7 @@ export class StreakService {
 
     if (streak.length === 0) {
       const newStreak = {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         userId,
         currentStreak: 0,
         longestStreak: 0,
