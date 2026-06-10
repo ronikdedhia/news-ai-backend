@@ -1,5 +1,7 @@
 # Daily Bytes
 
+**Live:** https://daily-bytes-ten.vercel.app/
+
 A full-stack AI-powered news aggregation and intelligence platform. Fetches news from multiple sources, runs it through a LangGraph AI pipeline (summarization, sentiment analysis, named entity recognition, contextual insight generation), and delivers personalized content via a modern web app and daily email digest.
 
 ---
