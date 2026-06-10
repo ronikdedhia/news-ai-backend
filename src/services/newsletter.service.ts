@@ -144,7 +144,6 @@ class NewsletterService {
 
           <!-- Masthead -->
           <div style="background:#0d1117;border-radius:14px 14px 0 0;padding:36px 32px 24px;text-align:center;">
-            <img src="${process.env.FRONTEND_URL}/favicon.svg" alt="Daily Bytes" width="56" height="56" style="display:inline-block;margin-bottom:16px;border-radius:14px;" />
             <div style="font-size:11px;letter-spacing:5px;color:#8b949e;text-transform:uppercase;margin-bottom:14px;">AI-Powered News Intelligence</div>
             <div style="font-size:46px;font-weight:900;color:#ffffff;letter-spacing:-1.5px;line-height:1;font-family:Georgia,serif;">Daily Bytes</div>
             <div style="height:2px;background:linear-gradient(90deg,transparent,#667eea,#764ba2,#667eea,transparent);margin:18px auto;max-width:280px;"></div>
