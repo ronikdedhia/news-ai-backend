@@ -31,6 +31,10 @@ class NewsDataService {
     try {
       logger.info(`Fetching ${maxArticles} latest news articles from NewsData.io`);
 
+      const since = new Date();
+      since.setUTCHours(since.getUTCHours() - 24);
+      const fromDate = since.toISOString().slice(0, 19).replace('T', ' ');
+
       const response = await this.client.get('/news', {
         params: {
           apikey: config.newsdata.apiKey,
@@ -41,13 +45,16 @@ class NewsDataService {
           image: 1,
           removeduplicate: 1,
           size: 10,
+          from_date: fromDate,
         },
       });
+
+      logger.info(`📊 [NewsData] raw status=${response.data?.status} totalResults=${response.data?.totalResults} results=${response.data?.results?.length ?? 'undefined'}`);
 
       // Validate response with Zod
       const validatedData = NewsDataResponseSchema.parse(response.data);
 
-      logger.info(`Successfully fetched ${validatedData.results.length} articles`);
+      logger.info(`📰 [NewsData] validated: ${validatedData.results.length} articles`);
 
       // Transform to internal Article format
       const articles: Article[] = validatedData.results.map((item) => ({

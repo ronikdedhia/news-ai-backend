@@ -13,11 +13,20 @@ import { finishRunNode } from './nodes/finish-run.node';
 import { logger } from '../../utils/logger';
 
 function routeAfterFetch(state: PipelineState): string {
-  return state.rawArticles.length > 0 ? 'dedupe' : 'notify';
+  if (state.rawArticles.length === 0) {
+    logger.warn(`⚠️ [route:fetch] 0 articles fetched — skipping to notify`);
+    return 'notify';
+  }
+  logger.info(`➡️ [route:fetch] ${state.rawArticles.length} articles → dedupe`);
+  return 'dedupe';
 }
 
 function routeAfterDedupe(state: PipelineState): string | Send[] {
-  if (state.newArticles.length === 0) return 'notify';
+  if (state.newArticles.length === 0) {
+    logger.warn(`⚠️ [route:dedupe] 0 new articles after dedup — skipping to notify`);
+    return 'notify';
+  }
+  logger.info(`➡️ [route:dedupe] ${state.newArticles.length} new articles → enrich fan-out`);
   return state.newArticles.map(article => new Send('enrich_article', { currentArticle: article }));
 }
 

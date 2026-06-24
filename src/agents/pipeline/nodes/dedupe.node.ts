@@ -16,6 +16,11 @@ export async function dedupeNode(state: PipelineState): Promise<Partial<Pipeline
   );
 
   const newArticles = checks.filter((a): a is Article => a !== null);
-  logger.info(`🔍 [dedupe] ${newArticles.length}/${state.rawArticles.length} are new`);
+  const dupeCount = state.rawArticles.length - newArticles.length;
+  logger.info(`🔍 [dedupe] ${newArticles.length}/${state.rawArticles.length} are new (${dupeCount} already in DB)`);
+  if (newArticles.length === 0) {
+    logger.warn(`⚠️ [dedupe] all ${state.rawArticles.length} articles already exist in DB`);
+    state.rawArticles.forEach(a => logger.info(`   dup: ${a.url}`));
+  }
   return { newArticles };
 }

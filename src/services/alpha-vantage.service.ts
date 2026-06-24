@@ -17,13 +17,20 @@ class AlphaVantageService {
   private baseUrl = 'https://www.alphavantage.co/query';
   private apiKey = process.env.ALPHA_VANTAGE_API_KEY;
 
+  private getYesterdayUTC(): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10).replace(/-/g, '') + 'T0000';
+  }
+
   async fetchStockNews(tickers: string[] = ['AAPL', 'MSFT', 'GOOGL'], limit: number = 10): Promise<StockNews[]> {
     try {
       if (!this.apiKey) {
         throw new Error('ALPHA_VANTAGE_API_KEY not configured');
       }
 
-      logger.info(`📈 Fetching stock news for ${tickers.join(', ')} from Alpha Vantage...`);
+      const timeFrom = this.getYesterdayUTC();
+      logger.info(`📈 Fetching stock news for ${tickers.join(', ')} from Alpha Vantage (since ${timeFrom})...`);
 
       const allNews: StockNews[] = [];
 
@@ -32,7 +39,7 @@ class AlphaVantageService {
 
         try {
           const response = await fetch(
-            `${this.baseUrl}?function=NEWS_SENTIMENT&tickers=${ticker}&apikey=${this.apiKey}`,
+            `${this.baseUrl}?function=NEWS_SENTIMENT&tickers=${ticker}&time_from=${timeFrom}&sort=LATEST&apikey=${this.apiKey}`,
             {
               headers: {
                 'Accept': 'application/json',
@@ -48,16 +55,27 @@ class AlphaVantageService {
 
           const data = await response.json() as any;
 
-          // Check for API errors
-          if (data.Note || data.Error) {
-            logger.warn(`Alpha Vantage API error for ${ticker}:`, data.Note || data.Error);
+          logger.info(`📊 [AV:${ticker}] response keys: ${Object.keys(data).join(', ')}`);
+
+          if (data.Note) {
+            logger.warn(`⚠️ [AV:${ticker}] rate-limit Note: ${data.Note}`);
+            continue;
+          }
+          if (data.Error) {
+            logger.warn(`⚠️ [AV:${ticker}] API Error: ${data.Error}`);
+            continue;
+          }
+          if (data.Information) {
+            logger.warn(`⚠️ [AV:${ticker}] API Information (likely premium wall): ${data.Information}`);
             continue;
           }
 
           if (!data.feed || !Array.isArray(data.feed)) {
-            logger.warn(`No news feed for ${ticker}`);
+            logger.warn(`⚠️ [AV:${ticker}] no feed array — keys present: ${Object.keys(data).join(', ')}`);
             continue;
           }
+
+          logger.info(`📰 [AV:${ticker}] feed has ${data.feed.length} items`);
 
           const tickerNews = data.feed.slice(0, limit - allNews.length).map((item: any) => ({
             id: createHash('md5').update(item.url || '').digest('hex'),

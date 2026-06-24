@@ -26,7 +26,12 @@ export async function fetchNode(state: PipelineState): Promise<Partial<PipelineS
       }));
     }
 
-    logger.info(`📡 [fetch] ${rawArticles.length} articles from ${state.source}`);
+    if (rawArticles.length === 0) {
+      logger.warn(`⚠️ [fetch] 0 articles from ${state.source} — API returned empty`);
+    } else {
+      logger.info(`📡 [fetch] ${rawArticles.length} articles from ${state.source}`);
+      logger.info(`📡 [fetch] sample URLs: ${rawArticles.slice(0, 3).map(a => a.url).join(' | ')}`);
+    }
     return { rawArticles };
   } catch (error: any) {
     const err: PipelineError = { articleUrl: '', stage: 'fetch', message: error.message };
