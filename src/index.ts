@@ -6,6 +6,7 @@ import { config } from './config';
 import { logger } from './utils/logger';
 import { initializeNewsPipeline } from './cron/news-pipeline.cron';
 import { initializeNewsletterCron } from './cron/newsletter.cron';
+import { initializeQStashSchedules } from './cron/qstash-schedule.cron';
 import { initializeDatabase } from './db/client';
 import { warmupEmbedder } from './services/embedding.service';
 import articlesRouter from './routes/articles.router';
@@ -13,6 +14,7 @@ import authRouter from './routes/auth.router';
 import bookmarksRouter from './routes/bookmarks.router';
 import notificationsRouter from './routes/notifications.router';
 import pipelineRouter from './routes/pipeline.router';
+import qstashRouter from './routes/qstash.router';
 import developerRouter from './routes/developer.router';
 import miscRouter from './routes/misc.router';
 
@@ -25,7 +27,9 @@ app.use(cors({
   origin: process.env.ALLOWED_ORIGIN || 'http://localhost:3001',
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req: any, _res, buf: Buffer) => { req.rawBody = buf.toString(); },
+}));
 
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
@@ -50,6 +54,7 @@ app.use('/api/auth', authRouter);
 app.use('/api', bookmarksRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api', pipelineRouter);
+app.use('/api', qstashRouter);
 app.use('/api', developerRouter);
 app.use('/api', miscRouter);
 
@@ -75,11 +80,17 @@ const server = app.listen(PORT, async () => {
   const dbConnected = await initializeDatabase();
 
   if (!dbConnected) {
-    logger.warn('⚠️  Database connection failed. Running in API-only mode (no cron jobs or persistence).');
-    logger.warn('💡 Tip: You can still test API endpoints, but data won\'t be saved.');
+    logger.warn('⚠️  Database connection failed at boot. Cron jobs are still being scheduled —');
+    logger.warn('💡 each run will retry its own DB connection rather than never firing again.');
   } else {
-    initializeNewsPipeline();
-    initializeNewsletterCron();
     warmupEmbedder();
   }
+
+  // Scheduled regardless of the boot-time DB check above: a transient connection
+  // blip at startup used to permanently disable every cron for the process's
+  // lifetime. Each job now attempts its own DB work per run and just logs/retries
+  // on failure instead of silently never running again until the next restart.
+  initializeNewsPipeline();
+  initializeNewsletterCron();
+  await initializeQStashSchedules();
 });

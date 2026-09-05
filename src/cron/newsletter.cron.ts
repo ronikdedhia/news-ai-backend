@@ -6,7 +6,7 @@ import { newsletterService } from '../services/newsletter.service';
  * Parse time string in HH:MM format (e.g., "08:00")
  * Returns cron expression for that time daily
  */
-function getNewsletterCronExpression(timeString: string): string {
+export function getNewsletterCronExpression(timeString: string): string {
   const [hours, minutes] = timeString.split(':').map(Number);
   if (isNaN(hours) || isNaN(minutes)) {
     logger.warn(`Invalid time format: ${timeString}, using default 08:00`);

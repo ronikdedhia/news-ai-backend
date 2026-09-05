@@ -54,7 +54,7 @@ export function initializeNewsPipeline() {
 /**
  * Execute NewsData pipeline
  */
-async function executeNewsDataJob() {
+export async function executeNewsDataJob() {
   try {
     logger.info('🔄 NewsData pipeline job started');
     const result = await pipelineService.executeNewsDataPipeline();
@@ -67,7 +67,7 @@ async function executeNewsDataJob() {
 /**
  * Execute Alpha Vantage pipeline
  */
-async function executeAlphaVantageJob() {
+export async function executeAlphaVantageJob() {
   try {
     logger.info('🔄 Alpha Vantage pipeline job started');
     const result = await pipelineService.executeAlphaVantagePipeline();
@@ -80,7 +80,7 @@ async function executeAlphaVantageJob() {
 /**
  * Execute NewsData cleanup with smart 15-day interval check
  */
-async function executeNewsDataCleanupJob() {
+export async function executeNewsDataCleanupJob() {
   try {
     const now = new Date();
 
@@ -121,7 +121,7 @@ async function executeNewsDataCleanupJob() {
 /**
  * Execute Alpha Vantage cleanup with smart 15-day interval check
  */
-async function executeAlphaVantageCleanupJob() {
+export async function executeAlphaVantageCleanupJob() {
   try {
     const now = new Date();
 
